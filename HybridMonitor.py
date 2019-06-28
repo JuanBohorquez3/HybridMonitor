@@ -10,20 +10,14 @@ import os
 import time
 import numpy as np
 import sys
-import Channel
+from Channel import Channel as Ch
 import PicosMonitor
 import NIDAQMonitor
-
 '''
-# TODO :
-    [ ] 1. Refactor
-    [ ] 2. Implement and import the magSensor class
-    [ ] 3. Determine failure conditions throughout and add corresponding ifs/trys
-    [ ] 4. Fix NIDAQMonitor.py to work in general for the NI DAQmx with any given set of inputs
-    [ ] 5. Make separate file setup for channel classes
-    [ ] 6. Make Device Monitor classes work with config files
+TODO:
+[ ] Refactor Channels(e.g "Hybrid_Beam_Balances") to Streams
+[ ] Refactor channels(e.g "X","Y") to Fields
 '''
-
 
 def close_all(channel_list):
     """
@@ -31,14 +25,18 @@ def close_all(channel_list):
     Arguments:
         channels -- array of channels
     """
-    status = np.empty(len(channels))
+    '''
+    # TODO :
+        [ ] This doesn't work with keyboard interrupts. Look at downstream classes failure modes and Fix
+    '''
+    status = np.empty(len(channels),dtype=object)
     for i, chan in enumerate(channel_list):
         print "closing channel : " + chan.name
         status[i] = chan.hang()
     return status
 
-
-measurementPeriod = 30  # s
+# How often to measure data and log it
+measurementPeriod = 4  # s
 
 t0 = time.clock()
 # we must first find ourselves
@@ -51,17 +49,24 @@ fullLibPath = os.path.join(fullBasePath, "origin\\origin\\lib")
 fullCfgPath = os.path.join(fullBasePath, "origin\\origin\\config")
 sys.path.append(fullLibPath)
 
-print 'getting origin'
+print 'getting origin library'
 from origin.client import server
 from origin import current_time, TIMESTAMP
 
 print 'initializing picos'
 # initialize the picos monitor
-tempChannels = {"Chamber": 1, "Coils": 2, "Near_Terminal": 3}
+tempChannels = {"Chamber": 1,
+                "Door Coils": 2,
+                "CPU Coils": 3,
+                "CS Bellows": 4,
+                "X1Y1": 5,
+                "X2Y2": 6,
+                "BreadBoard": 7,
+                "LN2 FillPort": 8}
 picosDLLPath = "C:\Program Files\Pico Technology\SDK\lib"
 picos = PicosMonitor.TC08USB(tempChannels, dll_path=picosDLLPath)
 
-print 'initializing pickoff monitor'
+print 'Initializing NIDAQ'
 # initialize the pickoff monitor
 I2VChannels = {"X1": 'ai4',
                "X2": 'ai2',
@@ -70,14 +75,42 @@ I2VChannels = {"X1": 'ai4',
                "Z1": 'ai3',
                "Z2": 'ai5'}
 # pickoff conversions
-I2VConversion = {"X1": lambda v: 0.685*v+0.00556,
-                 "X2": lambda v: 0.422*v-0.001,
-                 "Y1": lambda v: 1.016*v-0.0021,
-                 "Y2": lambda v: 0.935*v+0.0172,
-                 "Z1": lambda v: 0.447*v+0.009,
-                 "Z2": lambda v: 2.008*v+0.0284}
+I2VConversion = {"X1": lambda v: 0.758*v+0.031,
+                 "X2": lambda v: 0.380*v+0.041,
+                 "Y1": lambda v: 1.020*v-0.108,
+                 "Y2": lambda v: 1.000*v-0.080,
+                 "Z1": lambda v: 0.525*v-0.019,
+                 "Z2": lambda v: 1.711*v-0.068}
 
-I2V = NIDAQMonitor.NIDAQmxAI(I2VChannels, conversion=I2VConversion)
+MuxChannels = {"FORT": "ai6"}
+
+MuxConversion = {"FORT": lambda v: v}
+
+MagSensorChannels = {"X": 'ai8',
+                     "Y": 'ai9',
+                     "Z": 'ai10'}
+
+MagConversion = {"X": lambda v: v,
+                 "Y": lambda v: v,
+                 "Z": lambda v: v}
+
+uWRabiChannels = {"Internal Mon": 'ai6',
+                  "Circulator": 'ai7'}
+
+uWRabiConversion = {"Internal Mon": lambda v: v,
+                    "Circulator": lambda v: v}
+
+ADCChan = {"Hybrid_Beam_Balances": I2VChannels,
+           "Hybrid_Mag": MagSensorChannels,
+           "Hybrid_Mux": MuxChannels}
+           #"Hybrid_uW": uWRabiChannels}
+
+ADCCon = {"Hybrid_Beam_Balances": I2VConversion,
+          "Hybrid_Mag": MagConversion,
+          "Hybrid_Mux": MuxConversion}
+          #"Hybrid_uW": uWRabiConversion}
+
+NIDAQ = NIDAQMonitor.NIDAQmxAI(ADCChan, conversion=ADCCon)
 
 print 'grabbing config file'
 if len(sys.argv) > 1:
@@ -97,12 +130,15 @@ config.read(configfile)
 # something that represents the connection to the server
 print 'grabbing server'
 serv = server(config)
+
 print 'opening channels'
 # open the channels
 channels = []
-channels.append(Channel("Temp", "float", serv, tempChannels, picos))
-channels.append(Channel("Beam_Balances", "float", serv, I2VChannels, I2V))
-#    channels.append(magChannel("B","float",serv,["X,Y,Z"]))
+#channels.append(Ch("Temp", "float", serv, tempChannels, picos))
+channels.append(Ch("Beam_Balances", "float", serv, I2VChannels, NIDAQ))
+channels.append(Ch("Mag", "float", serv, MagSensorChannels, NIDAQ))
+channels.append(Ch("Mux", "float", serv, MuxChannels, NIDAQ))
+#channels.append(Ch("uW","float",serv,uWRabiChannels,NIDAQ))
 
 
 # This might need to be more complicated, but you get the gist. Keep sending records forever
@@ -137,6 +173,7 @@ while True:
         # time.sleep(measurementPeriod - deltaT)
 
     except KeyboardInterrupt:
+        # Trying to handle turning off the program monitor without leaving devices on and streams open
         close_all(channels)
         raise KeyboardInterrupt
         break

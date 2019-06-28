@@ -3,35 +3,47 @@ Parameter Monitoring Program used in the Hybrid Experiment
 
 # Installation:
 1. clone this repo onto your machine.  
-2. Replace the link labeled Origin with a symbolic link to your origin repo  
+2. Download the Origin repo from https://github.com/QuantumQuadrate/Origin.
+3. Replace the link labeled Origin with a symbolic link to your origin repo  
    -If your filepath looks like GitRepos/Origin/origin/ set the link to the innermost origin folder  
-3. Run python HybridMonitor.py
+   -You can also change the "fullbasepath" in HybridMonitor.py, to your local Origin path
+4. Run python HybridMonitor.py
 
 # Programming guide:
-This program consists of the HybridMonitor.py file and Device Monitor python files which take care of communication with a given measurement device.
+This program consists uses the HybridMonitor.py file as a sort of Main, and a few classes to control our interactions
+with our measurement devices(Monitors) and the server(channels*).
 
-* The HybridMonitor.py uses channel classes based on a parent channel class defined within the file. These classes take care of the communication with the Device Monitor files as well as writting to the server.   
-* Currently custom channel classes are written for each device, this provides some flexibility in how Device Monitor classes are written but may be cumbersome. 
-* Besides defining these channel classes HybridMonitor.py manages some of the origin server and instructs the channel classes when to write to the server.
-* The only way to turn off the data stream (that I've implemented) is with a KeyboardInterupt, it is important that your each channel has a hang function, this function should close the connection to the server and clear any connections to the device, if that isn't done automatically.  
-* Device Monitor classes (such as PicosMonitor.py) need to interact with a given device. They only requirement for these classes is that they have some callable function which returns a dictionary or list of data.
-* The corresponding channel class should set channel.data to a dictionary of data and dataNames, this is what is sent to the server.
+## Class Types:
+_Monitor_ : A monitor class is a class that serves as an interface between the computer and a measurement device (such as
+an NIDAQ). A monitor class represents the connection to a given device, but a given device can log data for many streams,
+thus the same monitor class should be able to measure for different streams independently.
+A monitor class should implement the following functions:
+* start_unit(self) : Opens connection with the device and performs any necessary initialization
+* measure(self, channel_name = None) : query the device to measure channels associated with channel_name
+* close(self) : should gracefully close connection with the unit
 
-# Current Device Monitor Files: 
+_Channel_ : (Should be Stream) represents a given stream and mediates its connection to the server and to the device that
+takes it's data
+
+
+# Current Monitor Classes:
 
 ## Picos Temperature Monitor (PicosMonitor.py)
 * Interfaces with the Picos TC-88 Temperature Monitor
   * Thermocouple logger
 * Driver Documentation: See "Thermocouple logger Programmer's guide.pdf"
 
-## I2V Pickoff Monitor (PickoffMonitor.py)
+## NIDAQMonitor (PickoffMonitor.py)
 * Interfaces with the NI DAQmx usb connected A/DC
-* Specifically written for the MOT beam pickoffs currently
-  * Can be modified to work with the NI DAQmx in for general purpose use as and A/DC
+* Written to take data for many streams and convert measured voltages to more relevant info
 * Driver Documentation: http://zone.ni.com/reference/en-XX/help/370471AA-01/
   
-# Device Monitor Files to be built :
-
-## MagSensor
-* Should Interface with an AD/C connected to the Magnetic Field Sensor
-* Hopefully will use same NI DAQmx as the I2V Pickoff Monitor
+# TODO:
+* Refactor code to make use of less ambiguous terms "Stream" to refer to a list of data channels of interest, "Field" to
+refer to a given data field on the server, and "Channel" to refer to the measurement port on a device. Currently, all three
+are just channel.
+* Save measured data locally to some sort of buffer variable or file, going back a certain amount of time. Use these data
+to plot measurements in real time.
+* Interface to change and set Stream, field and channel configuration without having to hard code the info into the
+HybridMonitor.py file. Allow updating this info wihtout restarting entire program, and minimizing the number of streams
+to Origin that need to be closed and re-opened

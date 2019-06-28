@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 class NIDAQmxAI(Mon):
 
     # TODO : Set this up to work with a config file
-    version = '2018.07.02'
+    version = '2018.11.02'
 
     allow_evaluation = True
     enable = False
@@ -43,10 +43,10 @@ class NIDAQmxAI(Mon):
     def __init__(self, channels, conversion=None):
 
         Mon.__init__(self, channels)
-        self.DeviceName = "Dev1"
-        self.samples_per_measurement = 2
+        self.DeviceName = "PXI2Slot6"
+        self.samples_per_measurement = 10
         self.sample_rate = 1000
-        self.triggerSource = '/Dev1/PFI0'
+        self.triggerSource = '/PXI2Slot6/PFI0'
         self.triggerEdge = 'Rising'
         self.nidaq = ctypes.windll.nicaiu
         self.DAQmx_Val_Cfg_Default = ctypes.c_long(-1)
@@ -54,22 +54,26 @@ class NIDAQmxAI(Mon):
 
         # Are we making a conversion from voltage to some other unit here?
         self.convert = isinstance(conversion, type({}))
+        print "NIDAQ self.convert  = {}".format(self.convert)
+        print "NIDAQ conversions = {}".format(conversion)
         # If so let's make sure the conversion dictionary is going to work
         err_type = "Error: Conversion should have lambda function at lowest level"
         if self.convert:
             err_shp = "Error: Conversion should have the same shape as channels"
             ch1 = self.channels.keys()
-            ch2 = self.conversion.keys()
+            ch2 = conversion.keys()
             assert set(ch1) == set(ch2), err_shp
             if self.many_channels:
-                for key, value in self.channels:
+                for key, value in self.channels.iteritems():
                     ch3 = value.keys()
                     assert isinstance(conversion[key], type({})), err_shp
                     ch4 = conversion[key].keys()
                     assert set(ch3) == set(ch4), err_shp
-                    assert isinstance(value, type(lambda x: x+1)), err_type
+                for key, value in conversion.iteritems():
+                    for func in value.values():
+                        assert isinstance(func, type(lambda x: x+1)), err_type
             else:
-                for key, value in conversion.iteriterms():
+                for key, value in conversion.iteritems():
                     assert isinstance(value, type(lambda x: x+1)), err_type
 
         self.conversion = conversion
@@ -77,12 +81,15 @@ class NIDAQmxAI(Mon):
         # List the analog in channels we will be monitoring on the DAQ
         if self.many_channels:
             self.channels_to_open = []
+            print self.channels.values()
             for channel in self.channels.values():
                 # make a list of all unique channels being opened
-                self.channels_to_open = list(set(self.channels_to_open) | set(channel))
+                self.channels_to_open = list(set(self.channels_to_open) | set(channel.values()))
         else:
             self.channels_to_open = channels.values()
 
+        self.channels_to_open.sort()
+        print self.channels_to_open
         self.mychans = self.channel_string()
 
         # initialize data location
@@ -97,7 +104,8 @@ class NIDAQmxAI(Mon):
                 mychans += self.DeviceName+"/"+chan+", "
             else:
                 mychans += self.DeviceName+"/"+chan
-                
+        
+        print "mychans : " + mychans
         return mychans
 
     def CHK(self, err, func):
@@ -195,14 +203,14 @@ class NIDAQmxAI(Mon):
             powers_usort = {}
             for i, chan in enumerate(self.channels_to_open):
                 powers_usort.update({chan: self.data[i]})
-            print powers_usort
+            #print powers_usort
 
             if channel_name is not None:
                 assert channel_name in self.channels.keys(), "channel_name is not a Monitor Channel"
 
             # place the (possibly) converted data, into a dictionary to be returned.
             powers = {}
-            print self.channels
+            #print self.channels
             # if there are many_channels, check if a channel_name has been specified, if so return data from that
             # channel. Otherwise return all of the data in a large dictionary.
             if self.many_channels:
@@ -216,8 +224,13 @@ class NIDAQmxAI(Mon):
                             else:
                                 powers[chan].update({key: powers_usort[value]})
                 else:
-                    for key, value in self.channels[channel_name]:
+                    #print self.channels[channel_name].keys()
+                    for key in self.channels[channel_name].keys():
+                        value = self.channels[channel_name][key]
                         if self.convert:
+                            #print self.channels[channel_name]
+                            #print channel_name
+                            #print key, value
                             func = self.conversion[channel_name][key]
                             powers.update({key: func(powers_usort[value])})
                         else:

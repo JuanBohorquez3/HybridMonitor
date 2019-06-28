@@ -29,8 +29,6 @@ class Channel(object) :
         self.connection = self.connect()
         self.data = {}
 
-        return self
-
     def connect(self):
         """
         lets the server know we are going to connect and will be sending this kind of data
@@ -41,7 +39,7 @@ class Channel(object) :
         conn = self.server.registerStream(
             stream=self.name,
             records=self.records,
-            timeout=30 * 1000)
+            timeout=60 * 1000)
         return conn
 
     def measure(self):
@@ -49,7 +47,7 @@ class Channel(object) :
         reads data from our DAQ and returns it as a dictionary
         :return: data, {data_names : data} dictionary mapping data streams to the relevant data
         """
-        self.data = self.monitor.measure()
+        self.data = self.monitor.measure(self.name)
         return self.data
 
     def hang(self):

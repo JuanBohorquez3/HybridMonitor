@@ -156,8 +156,9 @@ class TC08USB(Mon):
                 active channels: {channel_names: {stream_names: data}}
         """
 
-        if channel_name is not None:
-            assert channel_name in self.channels.keys(), "channel_name is not a Monitor Channel"
+        if self.many_channels:
+            if channel_name is not None:
+                assert channel_name in self.channels.keys(), "{} is not a Monitor Channel".format(channel_name)
 
         self.get_single()
         data = {}
