@@ -32,7 +32,7 @@ class MonitorThread(threading.Thread):
     A Thread class to handle communicating with channels (streams).
     Executes code, moved from end of this program, to allow GUI to run in main thread.
     """
-    def __init__(self,channels,config,queues,stop_event):
+    def __init__(self,channels,config,queues,stop_event,gui):
         """
         Initialize monitoring thread
         :param channels: a dictionary of channels with names as keys, to be communicated with
@@ -44,7 +44,7 @@ class MonitorThread(threading.Thread):
         self.channels = channels
         self.config = config
         self.queues = queues
-        self.stop_event = stop_event 
+        self.stop_event = stop_event
         
     def run(self):
         print 'Begin communication thread'
@@ -61,11 +61,11 @@ class MonitorThread(threading.Thread):
                     data = channel.data
                     data.update({TIMESTAMP: ts})
                     #print(data)
-#                    try:
-#                        channel.connection.send(**channel.data)
-#                    except Exception:
-#                        close_all(channels)
-#                        raise Exception
+                    try:
+                        channel.connection.send(**channel.data)
+                    except Exception:
+                        close_all(self.channels.values())
+                        raise Exception
                     self.queues[channel.name].put(data)
             # interrupt this with a keystroke and hang connection
                 if self.err == 1:
@@ -91,7 +91,6 @@ def close_all(channel_list):
     Arguments:
         channels -- array of channels
         
-    DEPRECATED - channel closing now handled by MonitorGUI
     """
     '''
     # TODO :
@@ -113,8 +112,8 @@ fullBinPath = os.path.abspath(os.getcwd())
 print fullBinPath
 fullBasePath = os.path.dirname(fullBinPath)
 print fullBasePath
-fullLibPath = os.path.join(fullBasePath, "C:\\Users\\Wendt\\Documents\\Hybrid\\Origin\\lib")
-fullCfgPath = os.path.join(fullBasePath, "C:\\Users\\Wendt\\Documents\\Hybrid\\Origin\\config")
+fullLibPath = os.path.join(fullBasePath, "origin\\origin\\lib")
+fullCfgPath = os.path.join(fullBasePath, "origin\\origin\\config")
 sys.path.append(fullLibPath)
 
 print 'getting origin library'
@@ -182,7 +181,8 @@ ADCCon = {"Hybrid_Beam_Balances": I2VConversion,
           "Hybrid_Mux": MuxConversion,
           "Hybrid_uW": uWRabiConversion}
 
-NIDAQ = DummyMonitor.DummyMonitor(ADCChan)#NIDAQMonitor.NIDAQmxAI(ADCChan, conversion=ADCCon)
+#NIDAQ = DummyMonitor.DummyMonitor(ADCChan)
+NIDAQ = NIDAQMonitor.NIDAQmxAI(ADCChan, conversion=ADCCon)
 
 print 'grabbing config file'
 if len(sys.argv) > 1:
@@ -220,7 +220,7 @@ time.sleep(2)
 #qq = Queue.Queue()
 stop_event = threading.Event()
 mongui = GUI.MonitorGUI(ADCChan,ADCQueue,measurementPeriod,"float",serv,NIDAQ)
-monthread = MonitorThread(mongui.channels,config,ADCQueue,stop_event)
+monthread = MonitorThread(mongui.channels,config,ADCQueue,stop_event,mongui)
 monthread.start()
 mongui.run()
 print "Exiting GUI."

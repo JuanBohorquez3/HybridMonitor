@@ -273,7 +273,10 @@ class MonitorGUI:
             status = np.empty(len(self.channels),dtype=object)
             chnames = self.channels.keys()
             for i, chname in enumerate(chnames):
-                status[i] = self.close_channel(chname)
+                try:
+                    status[i] = self.close_channel(chname)
+                except: 
+                    self.root.destroy()
             print self.openchannels
             self.root.destroy()
     
