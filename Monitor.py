@@ -19,6 +19,7 @@ class Monitor(object):
         # If channels is a dictionary of dictionary, this monitor handles many streams
         # otherwise it handles a single stream
         self.many_channels = isinstance(channels[tmp[0]], type({}))
+        print self.many_channels
 
         # all of the channel info should be in channels
         self.channels = channels
