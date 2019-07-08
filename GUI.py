@@ -56,14 +56,19 @@ class MonitorGUI:
         tlimitframe.pack(fill=BOTH,expand=1)
         tlimitframe.grid_columnconfigure(0,weight=1)
         
-        self.tlimitlabel = Label(tlimitframe,text="Time window to view (minutes):")
+        self.tlimitlabel = Label(tlimitframe,text="Time window to view (minutes, hrs:min):")
         self.tlimitlabel.grid(row=0,columnspan=2,sticky="ew")
         
         self.tlimmin = IntVar()
+        self.tlimmin.set(10)
         self.tlimhrs = IntVar()
+        self.tlimhrs.set(0)
+        self.tlimmin_display = StringVar()
+        self.tlimmin_display.set("%02d" % self.tlimmin.get())
         self.tlimitslider = Scale(tlimitframe,from_=10,to=24*60,resolution=10,orient=HORIZONTAL)
         self.tlimitslider.grid(row=1,sticky="ew")
-        self.tlimitslider.bind("<ButtonRelease-1>",self.set_entries)
+        self.tlimitslider.bind("<B1-Motion>",self.set_entries)
+        self.tlimitslider.bind("<Button-1>",self.set_entries)
         
         self.tlimithrs = Entry(tlimitframe,textvariable=self.tlimhrs,width=5)
         self.tlimithrs.grid(row=1,column=1)
@@ -72,25 +77,34 @@ class MonitorGUI:
         lbl1 = Label(tlimitframe,text=":")
         lbl1.grid(row=1,column=2)
         
-        self.tlimitmin = Entry(tlimitframe,textvariable=self.tlimmin,width=5)
+        self.tlimitmin = Entry(tlimitframe,textvariable=self.tlimmin_display,width=5)
         self.tlimitmin.grid(row=1,column=3)
-        self.tlimitmin.delete(0)
-        self.tlimitmin.insert(0,self.tlimitslider.get())
         self.tlimitmin.bind("<Return>", self.set_tlim)
         
-        self.tavglabel = Label(tlimitframe,text="Time to average over (seconds):")
+        self.tavglabel = Label(tlimitframe,text="Time to average over (seconds, min:sec):")
         self.tavglabel.grid(row=2,columnspan=2,sticky="ew")
         
-        self.tavg = IntVar()
+        self.tavgmin = IntVar()
+        self.tavgmin.set(0)
+        self.tavgsec = IntVar()
+        self.tavgsec.set(4)
+        self.tavgsec_display = StringVar()
+        self.tavgsec_display.set("%02d" % self.tavgsec.get())
         self.tavgslider = Scale(tlimitframe,from_=waitsecs,to=1800,resolution=waitsecs,orient=HORIZONTAL)
         self.tavgslider.grid(row=3,sticky="ew")
-        self.tavgslider.bind("<ButtonRelease-1>",self.set_entries)
+        self.tavgslider.bind("<B1-Motion>",self.set_entries)
+        self.tavgslider.bind("<Button-1>",self.set_entries)
         
-        self.tavgentry = Entry(tlimitframe,textvariable=self.tavg,width=5)
-        self.tavgentry.grid(row=3,column=1)
-        self.tavgentry.delete(0)
-        self.tavgentry.insert(0,self.tavgslider.get())
-        self.tavgentry.bind("<Return>", self.set_tavg)
+        self.tavgmins = Entry(tlimitframe,textvariable=self.tavgmin,width=5)
+        self.tavgmins.grid(row=3,column=1)
+        self.tavgmins.bind("<Return>", self.set_tavg)
+        
+        lbl2 = Label(tlimitframe,text=":")
+        lbl2.grid(row=3,column=2)
+        
+        self.tavgsecs = Entry(tlimitframe,textvariable=self.tavgsec_display,width=5)
+        self.tavgsecs.grid(row=3,column=3)
+        self.tavgsecs.bind("<Return>", self.set_tavg)
         
         self.lbl = Label(frame,text="Available channels:",width=50)
         self.lbl.pack(fill=X,expand=1)
@@ -151,24 +165,32 @@ class MonitorGUI:
         
     def set_tlim(self,event):
         try:
+            self.tlimmin.set(int(self.tlimmin_display.get()))
             self.tlimitslider.set(self.tlimmin.get()+60*self.tlimhrs.get())
             self.tlimmin.set(self.tlimitslider.get()%60)
+            self.tlimmin_display.set("%02d" % self.tlimmin.get())
             self.tlimhrs.set((self.tlimitslider.get()-self.tlimmin.get())/60)
         except Exception as e:
-            tkMessageBox.showerror("Error","Invalid entry. %s" % e)
+            tkMessageBox.showerror("Error","Invalid entry. Please enter a number.\nError: %s" % e)
         #print(self.tlim.get())
     
     def set_tavg(self,event):
         try:
-            self.tavgslider.set(self.tavg.get())
-            self.tavg.set(self.tavgslider.get()%60)
+            self.tavgsec.set(int(self.tavgsec_display.get()))
+            self.tavgslider.set(self.tavgsec.get()+60*self.tavgmin.get())
+            self.tavgsec.set(self.tavgslider.get()%60)
+            self.tavgsec_display.set("%02d" % self.tavgsec.get())
+            self.tavgmin.set((self.tavgslider.get()-self.tavgsec.get())/60)
         except Exception as e:
-            tkMessageBox.showerror("Error","Invalid entry. %s" % e)
+            tkMessageBox.showerror("Error","Invalid entry. Please enter a number.\nError: %s" % e)
     
     def set_entries(self,event):
         self.tlimmin.set(self.tlimitslider.get()%60)
+        self.tlimmin_display.set("%02d" % self.tlimmin.get())
         self.tlimhrs.set((self.tlimitslider.get()-self.tlimmin.get())/60)
-        self.tavg.set(self.tavgslider.get())
+        self.tavgsec.set(self.tavgslider.get()%60)
+        self.tavgsec_display.set("%02d" % self.tavgsec.get())
+        self.tavgmin.set((self.tavgslider.get()-self.tavgsec.get())/60)
     
     def plot_all(self):
         if self.started:
@@ -315,7 +337,7 @@ class ChannelOpenDialog(Toplevel):
         for chname in self.channelnames:
             self.enabledlist.update({chname : IntVar()})
             c = Checkbutton(master, text=chname,variable=self.enabledlist[chname])
-            c.pack()
+            c.pack(anchor="w")
         return None
     
     def buttonbox(self):
