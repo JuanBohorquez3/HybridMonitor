@@ -131,7 +131,7 @@ tempChannels = {"Chamber": 1,
                 "BreadBoard": 7,
                 "LN2 FillPort": 8}
 picosDLLPath = "C:\Program Files\Pico Technology\SDK\lib"
-picos = PicosMonitor.TC08USB(tempChannels, dll_path=picosDLLPath)
+picos = PicosMonitor.TC08USB(tempChannels, dll_path=picosDLLPath, channel_names="Hybrid_Temp")
 
 print 'Initializing NIDAQ'
 # initialize the pickoff monitor

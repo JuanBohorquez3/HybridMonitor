@@ -7,7 +7,7 @@ class Monitor(object):
     # This should be available from your device
     ERRORS = {0: 'Ok'}
 
-    def __init__(self, channels):
+    def __init__(self, channels, channel_names):
         """
         Initialize the monitor
         :param channels: A dictionary of dictionaries which map origin stream channel
@@ -19,7 +19,6 @@ class Monitor(object):
         # If channels is a dictionary of dictionary, this monitor handles many streams
         # otherwise it handles a single stream
         self.many_channels = isinstance(channels[tmp[0]], type({}))
-        print self.many_channels
 
         # all of the channel info should be in channels
         self.channels = channels
@@ -36,7 +35,8 @@ class Monitor(object):
         else:
             # channel names should be irrelevant and stream names should correspond to
             # keys in channels
-            self.channel_names = None
+            assert channel_names is not None, "channel name needs to be specified"
+            self.channel_names = channel_names
             self.stream_names = tmp
 
     def start_unit(self):

@@ -42,7 +42,7 @@ class TC08USB(Mon):
         'KELVIN': 2,
         'RANKINE': 3}
 
-    def __init__(self, channels, mains=60, tc_type='k', dll_path=""):
+    def __init__(self, channels, channel_names,mains=60, tc_type='k', dll_path=""):
         """
         Initialize and start up the Picos unit
         :param channels:
@@ -50,7 +50,7 @@ class TC08USB(Mon):
         :param tc_type:
         :param dll_path:
         """
-        Mon.__init__(self, channels)
+        Mon.__init__(self, channels,channel_names)
 
         self.mains = mains
         self.tc_type = tc_type
