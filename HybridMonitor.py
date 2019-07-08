@@ -32,7 +32,7 @@ class MonitorThread(threading.Thread):
     A Thread class to handle communicating with channels (streams).
     Executes code, moved from end of this program, to allow GUI to run in main thread.
     """
-    def __init__(self,channels,config,queues,stop_event,gui):
+    def __init__(self,channels,config,queues,stop_event):
         """
         Initialize monitoring thread
         :param channels: a dictionary of channels with names as keys, to be communicated with
@@ -61,11 +61,11 @@ class MonitorThread(threading.Thread):
                     data = channel.data
                     data.update({TIMESTAMP: ts})
                     #print(data)
-                    try:
-                        channel.connection.send(**channel.data)
-                    except Exception:
-                        close_all(self.channels.values())
-                        raise Exception
+#                    try:
+#                        channel.connection.send(**channel.data)
+#                    except Exception:
+#                        close_all(self.channels.values())
+#                        raise Exception
                     self.queues[channel.name].put(data)
             # interrupt this with a keystroke and hang connection
                 if self.err == 1:
@@ -112,8 +112,10 @@ fullBinPath = os.path.abspath(os.getcwd())
 print fullBinPath
 fullBasePath = os.path.dirname(fullBinPath)
 print fullBasePath
-fullLibPath = os.path.join(fullBasePath, "origin\\origin\\lib")
-fullCfgPath = os.path.join(fullBasePath, "origin\\origin\\config")
+#fullLibPath = os.path.join(fullBasePath, "origin\\origin\\lib")
+#fullCfgPath = os.path.join(fullBasePath, "origin\\origin\\config")
+fullLibPath = os.path.join(fullBasePath, "C:\\Users\\Wendt\\Documents\\Hybrid\\Origin\\lib")
+fullCfgPath = os.path.join(fullBasePath, "C:\\Users\\Wendt\\Documents\\Hybrid\\Origin\\config")
 sys.path.append(fullLibPath)
 
 print 'getting origin library'
@@ -171,18 +173,14 @@ ADCChan = {"Hybrid_Beam_Balances": I2VChannels,
            "Hybrid_Mag": MagSensorChannels,
            "Hybrid_Mux": MuxChannels,
            "Hybrid_uW": uWRabiChannels}
-           
-ADCQueue = {}
-for key in ADCChan:
-    ADCQueue[key] = Queue.Queue()
 
 ADCCon = {"Hybrid_Beam_Balances": I2VConversion,
           "Hybrid_Mag": MagConversion,
           "Hybrid_Mux": MuxConversion,
           "Hybrid_uW": uWRabiConversion}
 
-#NIDAQ = DummyMonitor.DummyMonitor(ADCChan)
-NIDAQ = NIDAQMonitor.NIDAQmxAI(ADCChan, conversion=ADCCon)
+NIDAQ = DummyMonitor.DummyMonitor(ADCChan,ADCChan.keys())
+#NIDAQ = NIDAQMonitor.NIDAQmxAI(ADCChan, conversion=ADCCon)
 
 print 'grabbing config file'
 if len(sys.argv) > 1:
@@ -219,8 +217,8 @@ time.sleep(2)
 
 #qq = Queue.Queue()
 stop_event = threading.Event()
-mongui = GUI.MonitorGUI(ADCChan,ADCQueue,measurementPeriod,"float",serv,NIDAQ)
-monthread = MonitorThread(mongui.channels,config,ADCQueue,stop_event,mongui)
+mongui = GUI.MonitorGUI(measurementPeriod,"float",serv,[NIDAQ,picos])
+monthread = MonitorThread(mongui.channels,config,mongui.queues,stop_event)
 monthread.start()
 mongui.run()
 print "Exiting GUI."

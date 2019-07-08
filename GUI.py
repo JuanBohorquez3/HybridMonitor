@@ -15,6 +15,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from functools import partial
 from datetime import datetime, timedelta
 import time
+import Queue
 
 def timeavg(datetimelist,navg):
     #average times, datetime is stupid
@@ -32,7 +33,7 @@ class MonitorGUI:
     Uses thread-safe queues to get data passed from MonitorThread.
     Plots data vs. time for enabled channels.
     """
-    def __init__(self,channeldict,q,waitsecs,datatype,serv,mon):
+    def __init__(self,waitsecs,datatype,serv,mons):
         """
         Initialize GUI.
         Open channel selection dialog and connect to selected channels.
@@ -109,8 +110,18 @@ class MonitorGUI:
         self.lbl = Label(frame,text="Available channels:",width=50)
         self.lbl.pack(fill=X,expand=1)
         
-        self.channeldict = channeldict
-        self.channelnames = channeldict.keys()
+        self.chmonitor = {}
+        
+        self.channeldict = {}
+        for mon in mons:
+            if mon.many_channels:
+                self.channeldict.update(mon.channels)
+                for ch in mon.channels:
+                    self.chmonitor.update({ch: mon})
+            else: 
+                self.channeldict.update({mon.channel_names: mon.channels})
+                self.chmonitor.update({mon.channel_names: mon})
+        self.channelnames = self.channeldict.keys()
         
         #channels is dictionary to contain actual open channel objects
         self.channels = {}
@@ -119,13 +130,14 @@ class MonitorGUI:
         self.openchannels = {}
         self.datatype = datatype
         self.serv = serv
-        self.mon = mon
         
         # open channels requested by user in initial dialog
         d = ChannelOpenDialog(self.root,self.channelnames)
         self.defaultchannels = d.result
             
-        self.queues = q
+        self.queues = {}
+        for name in self.channelnames:
+            self.queues[name] = Queue.Queue()
         self.waitsecs = waitsecs
         
         self.started = False
@@ -147,7 +159,7 @@ class MonitorGUI:
             self.openchannels.update({chname : False})
             self.times.update({chname : []})
             self.data.update({chname : []})
-            self.figs.update({chname : Figure(figsize=(8,1.5*len(channeldict[chname])))})
+            self.figs.update({chname : Figure(figsize=(8,1.5*len(self.channeldict[chname])))})
             self.axes.update({chname : []})
             for i, dataname in enumerate(self.channeldict[chname]):
                 print dataname
@@ -156,7 +168,7 @@ class MonitorGUI:
                 self.figs[chname].tight_layout()
         
         for chname in self.defaultchannels:
-            self.open_channel(chname,datatype,serv,mon)
+            self.open_channel(chname,datatype,serv,self.chmonitor[chname])
         
         self.start()
     
@@ -277,7 +289,6 @@ class MonitorGUI:
                     status[i] = self.close_channel(chname)
                 except: 
                     self.root.destroy()
-            print self.openchannels
             self.root.destroy()
     
     def callback(self,chname):
@@ -285,7 +296,7 @@ class MonitorGUI:
         if self.openchannels[chname]:
             self.close_channel(chname)
         else:
-            self.open_channel(chname,self.datatype,self.serv,self.mon)
+            self.open_channel(chname,self.datatype,self.serv,self.chmonitor[chname])
         
         
         

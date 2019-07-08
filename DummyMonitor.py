@@ -10,8 +10,8 @@ from Monitor import Monitor as Mon
 
 class DummyMonitor(Mon):
     
-    def __init__(self, channels):
-        Mon.__init__(self,channels)
+    def __init__(self, channels, channel_names):
+        Mon.__init__(self,channels,channel_names)
     
     def measure(self,channel_name=None):
         
