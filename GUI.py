@@ -163,7 +163,7 @@ class MonitorGUI:
         
         for j, chname in enumerate(self.channelnames):
             self.buttons.update({chname : Button(self.buttonframe,text=chname,relief=SUNKEN,bg="red",command=partial(self.toggle_chan,chname))})
-            self.plotbuttons.update({chname : Button(self.buttonframe,text="Open plot",state=DISABLED,command=partial(self.toggle_plot,chname))})
+            self.plotbuttons.update({chname : Button(self.buttonframe,text="Open plot",command=partial(self.toggle_plot,chname))})
             self.buttons[chname].grid(row=j,column=0,sticky='ew')
             self.plotbuttons[chname].grid(row=j,column=1,sticky='ew')
             self.openchannels.update({chname : False})
@@ -276,6 +276,8 @@ class MonitorGUI:
     
     def open_plot(self,chname):
         #create window and canvas to plot in
+        if not self.openchannels[chname]:
+            self.open_channel(chname,self.datatype,self.serv,self.chmonitor[chname])
         self.windows.update({chname : Toplevel()})
         self.windows[chname].title(chname)
         self.windows[chname].protocol("WM_DELETE_WINDOW", partial(self.close_plot,chname))
