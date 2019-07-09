@@ -15,6 +15,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from functools import partial
 from datetime import datetime, timedelta
 import time
+import Queue
 
 def timeavg(datetimelist,navg):
     #average times, datetime is stupid
@@ -32,7 +33,7 @@ class MonitorGUI:
     Uses thread-safe queues to get data passed from MonitorThread.
     Plots data vs. time for enabled channels.
     """
-    def __init__(self,channeldict,q,waitsecs,datatype,serv,mon):
+    def __init__(self,waitsecs,datatype,serv,mons):
         """
         Initialize GUI.
         Open channel selection dialog and connect to selected channels.
@@ -109,23 +110,36 @@ class MonitorGUI:
         self.lbl = Label(frame,text="Available channels:",width=50)
         self.lbl.pack(fill=X,expand=1)
         
-        self.channeldict = channeldict
-        self.channelnames = channeldict.keys()
+        self.chmonitor = {}
+        
+        self.channeldict = {}
+        for mon in mons:
+            if mon.many_channels:
+                self.channeldict.update(mon.channels)
+                for ch in mon.channels:
+                    self.chmonitor.update({ch: mon})
+            else: 
+                self.channeldict.update({mon.channel_names: mon.channels})
+                self.chmonitor.update({mon.channel_names: mon})
+        self.channelnames = self.channeldict.keys()
         
         #channels is dictionary to contain actual open channel objects
         self.channels = {}
         
-        #openchannels contains boolean for each channel: True if open, else False 
+        #open/plotchannels contain boolean for each channel: True if open, else False 
+        #openchannels tracks open channels and plotchannels tracks channels actively plotted
         self.openchannels = {}
+        self.plotchannels = {}
         self.datatype = datatype
         self.serv = serv
-        self.mon = mon
         
         # open channels requested by user in initial dialog
         d = ChannelOpenDialog(self.root,self.channelnames)
         self.defaultchannels = d.result
             
-        self.queues = q
+        self.queues = {}
+        for name in self.channelnames:
+            self.queues[name] = Queue.Queue()
         self.waitsecs = waitsecs
         
         self.started = False
@@ -139,15 +153,24 @@ class MonitorGUI:
         self.axes = {}
         self.canvases = {}
         self.windows = {}
-        self.buttons = {}
         
-        for chname in self.channelnames:
-            self.buttons.update({chname : Button(self.root,text=chname,relief=SUNKEN,bg="red",command=partial(self.callback,chname))})
-            self.buttons[chname].pack(fill=X,expand=1)
+        self.buttonframe = Frame(self.root)
+        self.buttonframe.pack(fill=X,expand=1)
+        self.buttonframe.grid_columnconfigure(0,weight=1)
+        self.buttonframe.grid_columnconfigure(1,weight=1)
+        self.buttons = {}
+        self.plotbuttons = {}
+        
+        for j, chname in enumerate(self.channelnames):
+            self.buttons.update({chname : Button(self.buttonframe,text=chname,relief=SUNKEN,bg="red",command=partial(self.toggle_chan,chname))})
+            self.plotbuttons.update({chname : Button(self.buttonframe,text="Open plot",command=partial(self.toggle_plot,chname))})
+            self.buttons[chname].grid(row=j,column=0,sticky='ew')
+            self.plotbuttons[chname].grid(row=j,column=1,sticky='ew')
             self.openchannels.update({chname : False})
+            self.plotchannels.update({chname : False})
             self.times.update({chname : []})
             self.data.update({chname : []})
-            self.figs.update({chname : Figure(figsize=(8,1.5*len(channeldict[chname])))})
+            self.figs.update({chname : Figure(figsize=(8,1.5*len(self.channeldict[chname])))})
             self.axes.update({chname : []})
             for i, dataname in enumerate(self.channeldict[chname]):
                 print dataname
@@ -156,7 +179,7 @@ class MonitorGUI:
                 self.figs[chname].tight_layout()
         
         for chname in self.defaultchannels:
-            self.open_channel(chname,datatype,serv,mon)
+            self.open_channel(chname,datatype,serv,self.chmonitor[chname])
         
         self.start()
     
@@ -199,6 +222,8 @@ class MonitorGUI:
             self.root.after(1000*self.waitsecs,self.plot_all)
     
     def plot_channel(self,chname):
+        #will collect data and add to figure even when figure not displayed in plot
+        
         while not self.queues[chname].empty():
             #data uploaded to dictionary in queue by MonitorThread, needs to be retrieved
             qitem = self.queues[chname].get() 
@@ -245,14 +270,22 @@ class MonitorGUI:
         self.channels.update({chname : Ch(chname,datatype,serv,self.channeldict[chname],mon)})
         self.openchannels.update({chname : True})
         self.buttons[chname].config(bg="green",relief=RAISED)
+        self.plotbuttons[chname].config(state="normal")
         
+        #self.open_plot(chname)
+    
+    def open_plot(self,chname):
         #create window and canvas to plot in
+        if not self.openchannels[chname]:
+            self.open_channel(chname,self.datatype,self.serv,self.chmonitor[chname])
         self.windows.update({chname : Toplevel()})
         self.windows[chname].title(chname)
-        self.windows[chname].protocol("WM_DELETE_WINDOW", partial(self.close_channel,chname))
+        self.windows[chname].protocol("WM_DELETE_WINDOW", partial(self.close_plot,chname))
         self.canvases.update({chname : FigureCanvasTkAgg(self.figs[chname],self.windows[chname])})
         self.canvases[chname].get_tk_widget().pack(fill=BOTH,expand=1,padx=5,pady=5)
         self.canvases[chname].draw()
+        self.plotbuttons[chname].config(text="Close plot",relief=SUNKEN)
+        self.plotchannels[chname] = True
         
     def close_channel(self,chname):
         #modified from close_all in HybridMonitor.py
@@ -261,33 +294,42 @@ class MonitorGUI:
             self.openchannels.update({chname : False})
             status = self.channels[chname].hang()
             del self.channels[chname]
-            self.windows[chname].destroy()
             self.buttons[chname].config(bg="red",relief=SUNKEN)
+            #self.plotbuttons[chname].config(state=DISABLED)
+            if self.plotchannels[chname]:
+                self.close_plot(chname)
         except Exception as e: 
             tkMessageBox.showerror("Error","Error in closing channel.\nError: %s" % e)
         return status
     
+    def close_plot(self,chname):
+        self.windows[chname].destroy()
+        self.plotbuttons[chname].config(text="Open plot",relief=RAISED)
+        self.plotchannels[chname] = False
+    
     def on_closing(self):
         #executed when root window is closed, closes all channels
         if tkMessageBox.askokcancel("Quit","Quit and close all open channels?"):
-            status = np.empty(len(self.channels),dtype=object)
-            chnames = self.channels.keys()
-            for i, chname in enumerate(chnames):
-                try:
+            try:
+                status = np.empty(len(self.channels),dtype=object)
+                chnames = self.channels.keys()
+                for i, chname in enumerate(chnames):
                     status[i] = self.close_channel(chname)
-                except: 
-                    self.root.destroy()
-            print self.openchannels
-            self.root.destroy()
+            finally:
+                self.root.destroy()
     
-    def callback(self,chname):
+    def toggle_chan(self,chname):
         #button function to open/close channels from main window
         if self.openchannels[chname]:
             self.close_channel(chname)
         else:
-            self.open_channel(chname,self.datatype,self.serv,self.mon)
+            self.open_channel(chname,self.datatype,self.serv,self.chmonitor[chname])
         
-        
+    def toggle_plot(self,chname):
+        if self.plotchannels[chname]:
+            self.close_plot(chname)
+        else:
+            self.open_plot(chname)
         
         
 class ChannelOpenDialog(Toplevel):
