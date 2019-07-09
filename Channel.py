@@ -56,5 +56,5 @@ class Channel(object) :
         :return: error code from the monitor class or the connection class
         """
         err_serv = self.connection.close()
-        err_monitor = self.monitor.close()
-        return [err_serv, err_monitor]
+        #err_monitor = self.monitor.close()
+        return err_serv

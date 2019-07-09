@@ -38,12 +38,10 @@ class MonitorGUI:
         Initialize GUI.
         Open channel selection dialog and connect to selected channels.
         Create data variables and buttons for all channels.
-        :param channeldict: a dictionary of channels with names as keys
-        :param q: a dictionary of queues keyed to channel names
         :param waitsecs: number of seconds to wait between updating plots
         :param datatype: type of data expected from channels (assumed to be same for all)
         :param serv: server
-        :param mon: monitor associated with channels to open
+        :param mons: monitors associated with channels to open
         """
         self.root = Tk()
         self.root.title("Hybrid Data Monitor")
@@ -112,6 +110,7 @@ class MonitorGUI:
         
         self.chmonitor = {}
         
+        self.mons = mons
         self.channeldict = {}
         for mon in mons:
             if mon.many_channels:
@@ -316,6 +315,8 @@ class MonitorGUI:
                 chnames = self.channels.keys()
                 for i, chname in enumerate(chnames):
                     status[i] = self.close_channel(chname)
+                for mon in self.mons:
+                    mon.close()
             finally:
                 self.root.destroy()
     
