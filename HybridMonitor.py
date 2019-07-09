@@ -61,11 +61,11 @@ class MonitorThread(threading.Thread):
                     data = channel.data
                     data.update({TIMESTAMP: ts})
                     #print(data)
-#                    try:
-#                        channel.connection.send(**channel.data)
-#                    except Exception:
-#                        close_all(self.channels.values())
-#                        raise Exception
+                    try:
+                        channel.connection.send(**channel.data)
+                    except Exception:
+                        close_all(self.channels.values())
+                        raise Exception
                     self.queues[channel.name].put(data)
             # interrupt this with a keystroke and hang connection
                 if self.err == 1:
@@ -112,10 +112,12 @@ fullBinPath = os.path.abspath(os.getcwd())
 print fullBinPath
 fullBasePath = os.path.dirname(fullBinPath)
 print fullBasePath
-#fullLibPath = os.path.join(fullBasePath, "origin\\origin\\lib")
-#fullCfgPath = os.path.join(fullBasePath, "origin\\origin\\config")
-fullLibPath = os.path.join(fullBasePath, "C:\\Users\\Wendt\\Documents\\Hybrid\\Origin\\lib")
-fullCfgPath = os.path.join(fullBasePath, "C:\\Users\\Wendt\\Documents\\Hybrid\\Origin\\config")
+## Works on Hybrid Machine
+fullLibPath = os.path.join(fullBasePath, "origin\\origin\\lib")
+fullCfgPath = os.path.join(fullBasePath, "origin\\origin\\config")
+## Works on Danny's Machine
+#fullLibPath = os.path.join(fullBasePath, "C:\\Users\\Wendt\\Documents\\Hybrid\\Origin\\lib")
+#fullCfgPath = os.path.join(fullBasePath, "C:\\Users\\Wendt\\Documents\\Hybrid\\Origin\\config")
 sys.path.append(fullLibPath)
 
 print 'getting origin library'
@@ -179,8 +181,8 @@ ADCCon = {"Hybrid_Beam_Balances": I2VConversion,
           "Hybrid_Mux": MuxConversion,
           "Hybrid_uW": uWRabiConversion}
 
-NIDAQ = DummyMonitor.DummyMonitor(ADCChan,ADCChan.keys())
-#NIDAQ = NIDAQMonitor.NIDAQmxAI(ADCChan, conversion=ADCCon)
+#NIDAQ = DummyMonitor.DummyMonitor(ADCChan,ADCChan.keys())
+NIDAQ = NIDAQMonitor.NIDAQmxAI(ADCChan, conversion=ADCCon,channel_names=ADCChan.keys())
 
 print 'grabbing config file'
 if len(sys.argv) > 1:
@@ -210,14 +212,15 @@ print 'opening channels'
 #channels.append(Ch("Mux", "float", serv, MuxChannels, NIDAQ))
 #channels.append(Ch("uW","float",serv,uWRabiChannels,NIDAQ))
 
-
+Monitors = [NIDAQ,
+            picos]
 
 # This might need to be more complicated, but you get the gist. Keep sending records forever
 time.sleep(2)
 
 #qq = Queue.Queue()
 stop_event = threading.Event()
-mongui = GUI.MonitorGUI(measurementPeriod,"float",serv,[NIDAQ,picos])
+mongui = GUI.MonitorGUI(measurementPeriod,"float",serv,Monitors)
 monthread = MonitorThread(mongui.channels,config,mongui.queues,stop_event)
 monthread.start()
 mongui.run()

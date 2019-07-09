@@ -254,7 +254,8 @@ class MonitorGUI:
                 timewindow = timedelta(seconds=self.tlimitslider.get()*60)
                 self.axes[chname][j].set_xlim([currentt-timewindow,currentt])
             #self.figs[chname].autofmt_xdate()
-            self.canvases[chname].draw()
+            if self.plotchannels[chname]:
+                self.canvases[chname].draw()
             
     def start(self,event=None):
         try:
