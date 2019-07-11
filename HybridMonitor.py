@@ -61,11 +61,12 @@ class MonitorThread(threading.Thread):
                     data = channel.data
                     data.update({TIMESTAMP: ts})
                     #print(data)
-                    try:
-                        channel.connection.send(**channel.data)
-                    except Exception:
-                        close_all(self.channels.values())
-                        raise Exception
+### Following try/except loop enables upload data to server
+#                    try:
+#                        channel.connection.send(**channel.data)
+#                    except Exception:
+#                        close_all(self.channels.values())
+#                        raise Exception
                     self.queues[channel.name].put(data)
             # interrupt this with a keystroke and hang connection
                 if self.err == 1:

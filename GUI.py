@@ -16,9 +16,11 @@ from functools import partial
 from datetime import datetime, timedelta
 import time
 import Queue
+import zmq
+import json
 
 def timeavg(datetimelist,navg):
-    #average times, datetime is stupid
+    #average times, datetime makes this hard
     dlist = map(datetime.timetuple, datetimelist)
     timestamplist = np.array(map(time.mktime,dlist))
     timestamplist = np.pad(timestamplist,(0, (navg-len(timestamplist)%navg)%navg),mode='constant',constant_values=np.NaN)
@@ -38,12 +40,10 @@ class MonitorGUI:
         Initialize GUI.
         Open channel selection dialog and connect to selected channels.
         Create data variables and buttons for all channels.
-        :param channeldict: a dictionary of channels with names as keys
-        :param q: a dictionary of queues keyed to channel names
         :param waitsecs: number of seconds to wait between updating plots
         :param datatype: type of data expected from channels (assumed to be same for all)
         :param serv: server
-        :param mon: monitor associated with channels to open
+        :param mons: monitors associated with channels to open
         """
         self.root = Tk()
         self.root.title("Hybrid Data Monitor")
@@ -107,11 +107,9 @@ class MonitorGUI:
         self.tavgsecs.grid(row=3,column=3)
         self.tavgsecs.bind("<Return>", self.set_tavg)
         
-        self.lbl = Label(frame,text="Available channels:",width=50)
-        self.lbl.pack(fill=X,expand=1)
-        
         self.chmonitor = {}
         
+        self.mons = mons
         self.channeldict = {}
         for mon in mons:
             if mon.many_channels:
@@ -161,25 +159,31 @@ class MonitorGUI:
         self.buttons = {}
         self.plotbuttons = {}
         
+        self.lbl = Label(self.buttonframe,text="Open and close channels:",width=40)
+        self.lbl.grid(row=0,column=0,sticky='ew')
+        self.lbl3 = Label(self.buttonframe,text="Toggle channel plots:")
+        self.lbl3.grid(row=0,column=1,sticky='ew')
+        
         for j, chname in enumerate(self.channelnames):
-            self.buttons.update({chname : Button(self.buttonframe,text=chname,relief=SUNKEN,bg="red",command=partial(self.toggle_chan,chname))})
+            self.buttons.update({chname : Button(self.buttonframe,text="%s (closed)"%chname,relief=SUNKEN,bg="red",command=partial(self.toggle_chan,chname))})
             self.plotbuttons.update({chname : Button(self.buttonframe,text="Open plot",command=partial(self.toggle_plot,chname))})
-            self.buttons[chname].grid(row=j,column=0,sticky='ew')
-            self.plotbuttons[chname].grid(row=j,column=1,sticky='ew')
+            self.buttons[chname].grid(row=j+1,column=0,sticky='ew')
+            self.plotbuttons[chname].grid(row=j+1,column=1,sticky='ew')
             self.openchannels.update({chname : False})
             self.plotchannels.update({chname : False})
             self.times.update({chname : []})
-            self.data.update({chname : []})
+            self.data.update({chname : {}})
             self.figs.update({chname : Figure(figsize=(8,1.5*len(self.channeldict[chname])))})
             self.axes.update({chname : []})
             for i, dataname in enumerate(self.channeldict[chname]):
-                print dataname
-                self.data[chname].append([])
+                self.data[chname][dataname] = []
                 self.axes[chname].append(self.figs[chname].add_subplot(len(self.channeldict[chname]),1,i+1))
                 self.figs[chname].tight_layout()
         
         for chname in self.defaultchannels:
             self.open_channel(chname,datatype,serv,self.chmonitor[chname])
+        
+        self.get_origin_data('x')
         
         self.start()
     
@@ -238,12 +242,13 @@ class MonitorGUI:
             #plot data for each field in channelstream
             for j, dataname in enumerate(self.channels[chname].data_names):
                 self.axes[chname][j].cla()
-                self.data[chname][j].append(qitem[dataname])
+                self.data[chname][dataname].append(qitem[dataname])
+                
                 temp_t = np.array(self.times[chname])
                 temp_t = timeavg(temp_t,navg)
                 
                 #data averaging done in temporary way in case navg changes
-                tempdata = np.array(self.data[chname][j])
+                tempdata = np.array(self.data[chname][dataname])
                 tempdata = np.pad(tempdata,(0, (navg-tempdata.size%navg)%navg),mode='constant',constant_values=np.NaN)
                 tempdata = tempdata.reshape(-1,navg)
                 tempdata = np.nanmean(tempdata,axis=1)
@@ -256,6 +261,12 @@ class MonitorGUI:
             #self.figs[chname].autofmt_xdate()
             if self.plotchannels[chname]:
                 self.canvases[chname].draw()
+            
+            #prune extraneous data, only 24h of data saved in buffer
+            while self.times[chname][0] < self.times[chname][-1]-timedelta(days=1):
+                self.times[chname] = self.times[chname][1:]
+                for field in self.data[chname]:
+                    self.data[chname][field] = self.data[chname][field][1:]
             
     def start(self,event=None):
         try:
@@ -270,8 +281,7 @@ class MonitorGUI:
         #open channel by creating channel object and add to channel
         self.channels.update({chname : Ch(chname,datatype,serv,self.channeldict[chname],mon)})
         self.openchannels.update({chname : True})
-        self.buttons[chname].config(bg="green",relief=RAISED)
-        self.plotbuttons[chname].config(state="normal")
+        self.buttons[chname].config(bg="green",relief=RAISED,text="%s (open)"%chname)
         
         #self.open_plot(chname)
     
@@ -295,7 +305,7 @@ class MonitorGUI:
             self.openchannels.update({chname : False})
             status = self.channels[chname].hang()
             del self.channels[chname]
-            self.buttons[chname].config(bg="red",relief=SUNKEN)
+            self.buttons[chname].config(bg="red",relief=SUNKEN,text="%s (closed)"%chname)
             #self.plotbuttons[chname].config(state=DISABLED)
             if self.plotchannels[chname]:
                 self.close_plot(chname)
@@ -316,6 +326,8 @@ class MonitorGUI:
                 chnames = self.channels.keys()
                 for i, chname in enumerate(chnames):
                     status[i] = self.close_channel(chname)
+                for mon in self.mons:
+                    mon.close()
             finally:
                 self.root.destroy()
     
@@ -331,7 +343,47 @@ class MonitorGUI:
             self.close_plot(chname)
         else:
             self.open_plot(chname)
+    
+    def get_origin_data(self,chname):
+        config = self.serv.config
+        context = zmq.Context()
+        socket = context.socket(zmq.REQ)
         
+        #copied from origin-reader-HybridMag:
+        host = 'hexlabmonitor.physics.wisc.edu' 
+        port = 5561
+        socket.connect("tcp://%s:%s" % (host,port))
+        stream_test_list = self.channelnames
+        start = 24*60*60
+        stop = 0*24*60*60
+        
+        stream_data = {}
+        
+        for stream in stream_test_list: 
+            print "sending raw read request for stream %s" % stream
+            request_obj = {'stream': stream, 'raw': True, 'start': time.time()-start, 'stop':time.time()-stop}
+            socket.send(json.dumps(request_obj))
+            response = socket.recv()
+            dat = json.loads(response)
+            indicator = dat[0]
+            truedata = dat[1]
+            stream_data[stream] = truedata
+            fields = stream_data[stream].keys()
+#            print fields
+#            print self.data[stream].keys()
+            for field in fields:
+                try: 
+                    if field == u'measurement_time':
+                        time_data = stream_data[stream][field]
+                        print 'time length', len(time_data)
+                        for timestamp in time_data:
+                            self.times[stream].append(datetime.fromtimestamp(timestamp/2**32))
+                    else:
+                        self.data[stream][field] = stream_data[stream][field]
+                        print 'data length', len(self.data[stream][field])
+                except Exception as e:
+                    print 'Error in getting stream %s, field %s: %s' % (stream, field, e)
+            
         
 class ChannelOpenDialog(Toplevel):
     """
