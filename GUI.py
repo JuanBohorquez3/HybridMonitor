@@ -191,6 +191,7 @@ class MonitorGUI:
         self.root.mainloop()
         
     def set_tlim(self,event):
+        #set time window limit based on typed time
         try:
             self.tlimmin.set(int(self.tlimmin_display.get()))
             self.tlimitslider.set(self.tlimmin.get()+60*self.tlimhrs.get())
@@ -202,6 +203,7 @@ class MonitorGUI:
         #print(self.tlim.get())
     
     def set_tavg(self,event):
+        #set time to average over based on typed time
         try:
             self.tavgsec.set(int(self.tavgsec_display.get()))
             self.tavgslider.set(self.tavgsec.get()+60*self.tavgmin.get())
@@ -212,6 +214,7 @@ class MonitorGUI:
             tkMessageBox.showerror("Error","Invalid entry. Please enter a number.\nError: %s" % e)
     
     def set_entries(self,event):
+        #set time window and average time based on slider values
         self.tlimmin.set(self.tlimitslider.get()%60)
         self.tlimmin_display.set("%02d" % self.tlimmin.get())
         self.tlimhrs.set((self.tlimitslider.get()-self.tlimmin.get())/60)
@@ -226,12 +229,15 @@ class MonitorGUI:
             self.root.after(1000*self.waitsecs,self.plot_all)
     
     def plot_channel(self,chname):
-        #will collect data and add to figure even when figure not displayed in plot
+        #will still collect data when plotchannels is False
+        #will only average and plot data when plotchannels is True
         
         while not self.queues[chname].empty():
             #data uploaded to dictionary in queue by MonitorThread, needs to be retrieved
             qitem = self.queues[chname].get() 
             t = qitem['measurement_time']
+            for dataname in self.channels[chname].data_names:
+                self.data[chname][dataname].append(qitem[dataname])
             
             #convert time from datestamp to datetime object format, add to time list
             self.times[chname].append(datetime.fromtimestamp(t/2**32))
@@ -239,27 +245,27 @@ class MonitorGUI:
             #number of points to average over based on time to avg/data time spacing
             navg = self.tavgslider.get()/self.waitsecs
             
-            #plot data for each field in channelstream
-            for j, dataname in enumerate(self.channels[chname].data_names):
-                self.axes[chname][j].cla()
-                self.data[chname][dataname].append(qitem[dataname])
-                
+            if self.plotchannels[chname]:
+                #create temporary time average array
                 temp_t = np.array(self.times[chname])
                 temp_t = timeavg(temp_t,navg)
-                
-                #data averaging done in temporary way in case navg changes
-                tempdata = np.array(self.data[chname][dataname])
-                tempdata = np.pad(tempdata,(0, (navg-tempdata.size%navg)%navg),mode='constant',constant_values=np.NaN)
-                tempdata = tempdata.reshape(-1,navg)
-                tempdata = np.nanmean(tempdata,axis=1)
-                
-                self.axes[chname][j].plot(temp_t,tempdata)
-                self.axes[chname][j].set_title(dataname)
-                currentt = temp_t[-1]
-                timewindow = timedelta(seconds=self.tlimitslider.get()*60)
-                self.axes[chname][j].set_xlim([currentt-timewindow,currentt])
-            #self.figs[chname].autofmt_xdate()
-            if self.plotchannels[chname]:
+            
+                #plot data for each field in channelstream
+                for j, dataname in enumerate(self.channels[chname].data_names):
+                    self.axes[chname][j].cla()
+                    
+                    #data averaging done in temporary way in case navg changes
+                    tempdata = np.array(self.data[chname][dataname])
+                    tempdata = np.pad(tempdata,(0, (navg-tempdata.size%navg)%navg),mode='constant',constant_values=np.NaN)
+                    tempdata = tempdata.reshape(-1,navg)
+                    tempdata = np.nanmean(tempdata,axis=1)
+                    
+                    self.axes[chname][j].plot(temp_t,tempdata)
+                    self.axes[chname][j].set_title(dataname)
+                    currentt = temp_t[-1]
+                    timewindow = timedelta(seconds=self.tlimitslider.get()*60)
+                    self.axes[chname][j].set_xlim([currentt-timewindow,currentt])
+                    #self.figs[chname].autofmt_xdate()
                 self.canvases[chname].draw()
             
             #prune extraneous data, only 24h of data saved in buffer
@@ -375,14 +381,15 @@ class MonitorGUI:
                 try: 
                     if field == u'measurement_time':
                         time_data = stream_data[stream][field]
-                        print 'time length', len(time_data)
                         for timestamp in time_data:
                             self.times[stream].append(datetime.fromtimestamp(timestamp/2**32))
                     else:
                         self.data[stream][field] = stream_data[stream][field]
-                        print 'data length', len(self.data[stream][field])
                 except Exception as e:
                     print 'Error in getting stream %s, field %s: %s' % (stream, field, e)
+            
+            
+            
             
         
 class ChannelOpenDialog(Toplevel):
