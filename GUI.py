@@ -12,6 +12,8 @@ import numpy as np
 from Channel import Channel as Ch
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from pandas.plotting import register_matplotlib_converters
+register_matplotlib_converters()
 from functools import partial
 from datetime import datetime, timedelta
 import time
@@ -149,7 +151,9 @@ class MonitorGUI:
         
         self.figs = {}
         self.axes = {}
+        self.lines = {}
         self.canvases = {}
+        self.scrollbars = {}
         self.windows = {}
         
         self.buttonframe = Frame(self.root)
@@ -175,10 +179,11 @@ class MonitorGUI:
             self.data.update({chname : {}})
             self.figs.update({chname : Figure(figsize=(8,1.5*len(self.channeldict[chname])))})
             self.axes.update({chname : []})
+            self.lines.update({chname : {}})
             for i, dataname in enumerate(self.channeldict[chname]):
                 self.data[chname][dataname] = []
                 self.axes[chname].append(self.figs[chname].add_subplot(len(self.channeldict[chname]),1,i+1))
-                self.figs[chname].tight_layout()
+                self.figs[chname].set_tight_layout(True)
         
         for chname in self.defaultchannels:
             self.open_channel(chname,datatype,serv,self.chmonitor[chname])
@@ -252,21 +257,22 @@ class MonitorGUI:
             
                 #plot data for each field in channelstream
                 for j, dataname in enumerate(self.channels[chname].data_names):
-                    self.axes[chname][j].cla()
-                    
                     #data averaging done in temporary way in case navg changes
                     tempdata = np.array(self.data[chname][dataname])
                     tempdata = np.pad(tempdata,(0, (navg-tempdata.size%navg)%navg),mode='constant',constant_values=np.NaN)
                     tempdata = tempdata.reshape(-1,navg)
                     tempdata = np.nanmean(tempdata,axis=1)
                     
-                    self.axes[chname][j].plot(temp_t,tempdata)
-                    self.axes[chname][j].set_title(dataname)
+                    self.lines[chname][dataname].set_xdata(temp_t)
+                    self.lines[chname][dataname].set_ydata(tempdata)
+                    
                     currentt = temp_t[-1]
                     timewindow = timedelta(seconds=self.tlimitslider.get()*60)
                     self.axes[chname][j].set_xlim([currentt-timewindow,currentt])
                     #self.figs[chname].autofmt_xdate()
-                self.canvases[chname].draw()
+                self.figs[chname].canvas.draw()
+                self.figs[chname].canvas.flush_events()
+                #self.canvases[chname].draw()
             
             #prune extraneous data, only 24h of data saved in buffer
             while self.times[chname][0] < self.times[chname][-1]-timedelta(days=1):
@@ -278,7 +284,11 @@ class MonitorGUI:
         try:
             self.started=True
             self.plot_all()
-            print "Started plotting."
+            for chname in self.channelnames:
+                for j,dataname in enumerate(self.channeldict[chname]):
+                    self.lines[chname][dataname], = self.axes[chname][j].plot(self.times[chname],self.data[chname][dataname])
+                    self.axes[chname][j].set_title(dataname)
+            print "Started GUI."
         except Exception as e:
             print e
             tkMessageBox.showerror("Error","Error in plotting. Please try again.\nError: %s" % e)
@@ -298,8 +308,24 @@ class MonitorGUI:
         self.windows.update({chname : Toplevel()})
         self.windows[chname].title(chname)
         self.windows[chname].protocol("WM_DELETE_WINDOW", partial(self.close_plot,chname))
-        self.canvases.update({chname : FigureCanvasTkAgg(self.figs[chname],self.windows[chname])})
-        self.canvases[chname].get_tk_widget().pack(fill=BOTH,expand=1,padx=5,pady=5)
+        self.windows[chname].resizable(width=False, height=True)
+        
+        size=self.figs[chname].get_size_inches()*self.figs[chname].dpi
+        temp = Canvas(master=self.windows[chname],width=size[0],height=4*self.figs[chname].dpi)
+        temp.pack(side=LEFT,fill=Y,expand=1,padx=5,pady=5)
+        
+        self.scrollbars.update({chname : Scrollbar(self.windows[chname])})
+        self.scrollbars[chname].pack(side=RIGHT,fill=Y)
+        
+        self.canvases.update({chname : FigureCanvasTkAgg(self.figs[chname],temp)})
+        
+        temp.config(yscrollcommand=self.scrollbars[chname].set)
+        self.scrollbars[chname].config(command=temp.yview)
+        temp.create_window(0,0,window=self.canvases[chname].get_tk_widget(),anchor=NW)
+        temp.config(scrollregion=temp.bbox(ALL))
+        temp.bind('<Enter>',partial(self.bind_mousewheel,temp))
+        temp.bind('<Leave>',partial(self.unbind_mousewheel,temp))
+        
         self.canvases[chname].draw()
         self.plotbuttons[chname].config(text="Close plot",relief=SUNKEN)
         self.plotchannels[chname] = True
@@ -323,6 +349,15 @@ class MonitorGUI:
         self.windows[chname].destroy()
         self.plotbuttons[chname].config(text="Open plot",relief=RAISED)
         self.plotchannels[chname] = False
+        
+    def bind_mousewheel(self,canv,event):
+        canv.bind_all("<MouseWheel>", partial(self.on_mousewheel,canv))
+        
+    def unbind_mousewheel(self,canv,event):
+        canv.unbind_all("<MouseWheel>")
+        
+    def on_mousewheel(self,canv,event):
+        canv.yview_scroll(int(-1*(event.delta/120)),"units")
     
     def on_closing(self):
         #executed when root window is closed, closes all channels

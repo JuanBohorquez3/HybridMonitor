@@ -162,9 +162,9 @@ MagSensorChannels = {"X": 'ai8',
                      "Y": 'ai9',
                      "Z": 'ai10'}
 
-MagConversion = {"X": lambda v: v,
-                 "Y": lambda v: v,
-                 "Z": lambda v: v}
+MagConversion = {"X": lambda v: 0.2*v,
+                 "Y": lambda v: 0.2*v,
+                 "Z": lambda v: 0.2*v}
 
 uWRabiChannels = {"Internal Mon": 'ai6',
                   "Circulator": 'ai7'}
