@@ -132,10 +132,6 @@ class MonitorGUI:
         self.plotchannels = {}
         self.datatype = datatype
         self.serv = serv
-        
-        # open channels requested by user in initial dialog
-        d = ChannelOpenDialog(self.root,self.channelnames)
-        self.defaultchannels = d.result
             
         self.queues = {}
         for name in self.channelnames:
@@ -185,10 +181,14 @@ class MonitorGUI:
                 self.axes[chname].append(self.figs[chname].add_subplot(len(self.channeldict[chname]),1,i+1))
                 self.figs[chname].set_tight_layout(True)
         
+        self.get_origin_data()
+        
+        # open channels requested by user in initial dialog
+        d = ChannelOpenDialog(self.root,self.channelnames)
+        self.defaultchannels = d.result
+        
         for chname in self.defaultchannels:
             self.open_channel(chname,datatype,serv,self.chmonitor[chname])
-        
-        self.get_origin_data('x')
         
         self.start()
     
@@ -238,28 +238,28 @@ class MonitorGUI:
         #will only average and plot data when plotchannels is True
         
         while not self.queues[chname].empty():
+            
+            
             #data uploaded to dictionary in queue by MonitorThread, needs to be retrieved
             qitem = self.queues[chname].get() 
             t = qitem['measurement_time']
             for dataname in self.channels[chname].data_names:
-                self.data[chname][dataname].append(qitem[dataname])
+                self.data[chname][dataname] = self.shift1(self.data[chname][dataname],qitem[dataname])
             
             #convert time from datestamp to datetime object format, add to time list
-            self.times[chname].append(datetime.fromtimestamp(t/2**32))
+            self.times[chname] = self.shift1(self.times[chname],datetime.fromtimestamp(t/2**32))
             
             #number of points to average over based on time to avg/data time spacing
             navg = self.tavgslider.get()/self.waitsecs
             
             if self.plotchannels[chname]:
                 #create temporary time average array
-                temp_t = np.array(self.times[chname])
-                temp_t = timeavg(temp_t,navg)
+                temp_t = timeavg(self.times[chname],navg)
             
                 #plot data for each field in channelstream
                 for j, dataname in enumerate(self.channels[chname].data_names):
                     #data averaging done in temporary way in case navg changes
-                    tempdata = np.array(self.data[chname][dataname])
-                    tempdata = np.pad(tempdata,(0, (navg-tempdata.size%navg)%navg),mode='constant',constant_values=np.NaN)
+                    tempdata = np.pad(self.data[chname][dataname],(0, (navg-self.data[chname][dataname].size%navg)%navg),mode='constant',constant_values=np.NaN)
                     tempdata = tempdata.reshape(-1,navg)
                     tempdata = np.nanmean(tempdata,axis=1)
                     
@@ -273,12 +273,13 @@ class MonitorGUI:
                 self.figs[chname].canvas.draw()
                 self.figs[chname].canvas.flush_events()
                 #self.canvases[chname].draw()
-            
-            #prune extraneous data, only 24h of data saved in buffer
-            while self.times[chname][0] < self.times[chname][-1]-timedelta(days=1):
-                self.times[chname] = self.times[chname][1:]
-                for field in self.data[chname]:
-                    self.data[chname][field] = self.data[chname][field][1:]
+    
+    def shift1(self, arr, value=np.nan):
+        #efficient shifting algorithm to discard first element and add value at end
+        result = np.empty_like(arr)
+        result[-1] = value
+        result[:-1] = arr[1:]
+        return result
             
     def start(self,event=None):
         try:
@@ -385,7 +386,7 @@ class MonitorGUI:
         else:
             self.open_plot(chname)
     
-    def get_origin_data(self,chname):
+    def get_origin_data(self):
         config = self.serv.config
         context = zmq.Context()
         socket = context.socket(zmq.REQ)
@@ -394,19 +395,17 @@ class MonitorGUI:
         host = 'hexlabmonitor.physics.wisc.edu' 
         port = 5561
         socket.connect("tcp://%s:%s" % (host,port))
-        stream_test_list = self.channelnames
         start = 24*60*60
         stop = 0*24*60*60
         
         stream_data = {}
         
-        for stream in stream_test_list: 
+        for stream in self.channelnames: 
             print "sending raw read request for stream %s" % stream
             request_obj = {'stream': stream, 'raw': True, 'start': time.time()-start, 'stop':time.time()-stop}
             socket.send(json.dumps(request_obj))
             response = socket.recv()
             dat = json.loads(response)
-            indicator = dat[0]
             truedata = dat[1]
             stream_data[stream] = truedata
             fields = stream_data[stream].keys()
@@ -418,8 +417,9 @@ class MonitorGUI:
                         time_data = stream_data[stream][field]
                         for timestamp in time_data:
                             self.times[stream].append(datetime.fromtimestamp(timestamp/2**32))
+                        self.times[stream] = np.array(self.times[stream])
                     else:
-                        self.data[stream][field] = stream_data[stream][field]
+                        self.data[stream][field] = np.array(stream_data[stream][field])
                 except Exception as e:
                     print 'Error in getting stream %s, field %s: %s' % (stream, field, e)
             
