@@ -40,9 +40,9 @@ class NIDAQmxAI(Mon):
     DAQmx_Val_ChanPerLine = 0
     convert = False
 
-    def __init__(self, channels, channel_names, conversion=None):
+    def __init__(self, channels, conversion=None):
 
-        Mon.__init__(self, channels,channel_names)
+        Mon.__init__(self, channels)
         self.DeviceName = "PXI2Slot6"
         self.samples_per_measurement = 10
         self.sample_rate = 1000
