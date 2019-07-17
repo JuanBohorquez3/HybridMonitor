@@ -114,11 +114,11 @@ print fullBinPath
 fullBasePath = os.path.dirname(fullBinPath)
 print fullBasePath
 ## Works on Hybrid Machine
-#fullLibPath = os.path.join(fullBasePath, "origin\\origin\\lib")
-#fullCfgPath = os.path.join(fullBasePath, "origin\\origin\\config")
+fullLibPath = os.path.join(fullBasePath, "origin\\origin\\lib")
+fullCfgPath = os.path.join(fullBasePath, "origin\\origin\\config")
 ## Works on Danny's Machine
-fullLibPath = os.path.join(fullBasePath, "D:\\Repositories\\Origin\\lib")
-fullCfgPath = os.path.join(fullBasePath, "D:\\Repositories\\Origin\\config")
+#fullLibPath = os.path.join(fullBasePath, "D:\\Repositories\\Origin\\lib")
+#fullCfgPath = os.path.join(fullBasePath, "D:\\Repositories\\Origin\\config")
 sys.path.append(fullLibPath)
 
 print 'getting origin library'
@@ -182,8 +182,8 @@ ADCCon = {"Hybrid_Beam_Balances": I2VConversion,
           "Hybrid_Mux": MuxConversion,
           "Hybrid_uW": uWRabiConversion}
 
-NIDAQ = DummyMonitor.DummyMonitor(ADCChan,ADCChan.keys())
-#NIDAQ = NIDAQMonitor.NIDAQmxAI(ADCChan, conversion=ADCCon,channel_names=ADCChan.keys())
+#NIDAQ = DummyMonitor.DummyMonitor(ADCChan,ADCChan.keys())
+NIDAQ = NIDAQMonitor.NIDAQmxAI(ADCChan, conversion=ADCCon,channel_names=ADCChan.keys())
 
 print 'grabbing config file'
 if len(sys.argv) > 1:
@@ -204,7 +204,7 @@ config.read(configfile)
 print 'grabbing server'
 serv = server(config)
 
-print 'opening channels'
+#print 'opening channels'
 # open the channels
 #channels = []
 #channels.append(Ch("Temp", "float", serv, tempChannels, picos))
@@ -217,7 +217,6 @@ Monitors = [NIDAQ,
             picos]
 
 # This might need to be more complicated, but you get the gist. Keep sending records forever
-time.sleep(2)
 
 #qq = Queue.Queue()
 stop_event = threading.Event()

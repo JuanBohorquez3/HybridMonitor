@@ -16,6 +16,7 @@ from pandas.plotting import register_matplotlib_converters
 register_matplotlib_converters()
 from functools import partial
 from datetime import datetime, timedelta
+from matplotlib.dates import DateFormatter
 import time
 import Queue
 import zmq
@@ -179,6 +180,7 @@ class MonitorGUI:
             for i, dataname in enumerate(self.channeldict[chname]):
                 self.data[chname][dataname] = []
                 self.axes[chname].append(self.figs[chname].add_subplot(len(self.channeldict[chname]),1,i+1))
+                self.axes[chname][i].xaxis.set_major_formatter(DateFormatter('%H:%M'))
                 self.figs[chname].set_tight_layout(True)
         
         self.get_origin_data()
@@ -269,6 +271,7 @@ class MonitorGUI:
                     currentt = temp_t[-1]
                     timewindow = timedelta(seconds=self.tlimitslider.get()*60)
                     self.axes[chname][j].set_xlim([currentt-timewindow,currentt])
+                    self.axes[chname][j].set_ylim([np.amin(tempdata),np.amax(tempdata)])
                     #self.figs[chname].autofmt_xdate()
                 self.figs[chname].canvas.draw()
                 self.figs[chname].canvas.flush_events()
