@@ -13,23 +13,91 @@ import sys
 from Channel import Channel as Ch
 import PicosMonitor
 import NIDAQMonitor
+import DummyMonitor
+import GUI
+import matplotlib as plt
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import threading
+import Queue
 '''
 TODO:
 [ ] Refactor Channels(e.g "Hybrid_Beam_Balances") to Streams
 [ ] Refactor channels(e.g "X","Y") to Fields
 '''
 
+#Defined here for now to avoid issues with importing
+class MonitorThread(threading.Thread):
+    """
+    A Thread class to handle communicating with channels (streams).
+    Executes code, moved from end of this program, to allow GUI to run in main thread.
+    """
+    def __init__(self,channels,config,queues,stop_event):
+        """
+        Initialize monitoring thread
+        :param channels: a dictionary of channels with names as keys, to be communicated with
+        :param config: 
+        :param queues: a dictionary of queues keyed to channel names
+        :param stop_event: a threading Event to ensure thread is stopped when GUI closes
+        """
+        threading.Thread.__init__(self)
+        self.channels = channels
+        self.config = config
+        self.queues = queues
+        self.stop_event = stop_event
+        
+    def run(self):
+        print 'Begin communication thread'
+        for channel in self.channels.values():
+            print channel.name
+        self.err = 0
+        while not self.stop_event.is_set():
+            try:
+                # t1 = time.clock()
+                for channel in self.channels.values():
+                    print "sending " + channel.name
+                    print "Measured :" + repr(channel.measure())
+                    ts = current_time(self.config)
+                    data = channel.data
+                    data.update({TIMESTAMP: ts})
+                    #print(data)
+### Following try/except loop enables upload data to server
+#                    try:
+#                        channel.connection.send(**channel.data)
+#                    except Exception:
+#                        close_all(self.channels.values())
+#                        raise Exception
+                    self.queues[channel.name].put(data)
+            # interrupt this with a keystroke and hang connection
+                if self.err == 1:
+                    break
+                time.sleep(measurementPeriod)
+        # FOR TIMING:
+        # t2 = time.clock()
+        # deltaT = t2 - t1
+        # time.sleep(measurementPeriod - deltaT)
+
+            except KeyboardInterrupt:
+                # Trying to handle turning off the program monitor without leaving devices on and streams open
+                #close_all(channels)
+                # ^ NOW HANDLED BY GUI
+                raise KeyboardInterrupt
+                break
+        
+        print "Stopping communication thread."
+
 def close_all(channel_list):
     """
     closes all the channels in the argument.
     Arguments:
         channels -- array of channels
+        
     """
     '''
     # TODO :
         [ ] This doesn't work with keyboard interrupts. Look at downstream classes failure modes and Fix
     '''
-    status = np.empty(len(channels),dtype=object)
+    status = np.empty(len(channel_list),dtype=object)
     for i, chan in enumerate(channel_list):
         print "closing channel : " + chan.name
         status[i] = chan.hang()
@@ -45,8 +113,12 @@ fullBinPath = os.path.abspath(os.getcwd())
 print fullBinPath
 fullBasePath = os.path.dirname(fullBinPath)
 print fullBasePath
+## Works on Hybrid Machine
 fullLibPath = os.path.join(fullBasePath, "origin\\origin\\lib")
 fullCfgPath = os.path.join(fullBasePath, "origin\\origin\\config")
+## Works on Danny's Machine
+#fullLibPath = os.path.join(fullBasePath, "D:\\Repositories\\Origin\\lib")
+#fullCfgPath = os.path.join(fullBasePath, "D:\\Repositories\\Origin\\config")
 sys.path.append(fullLibPath)
 
 print 'getting origin library'
@@ -64,7 +136,7 @@ tempChannels = {"Chamber": 1,
                 "BreadBoard": 7,
                 "LN2 FillPort": 8}
 picosDLLPath = "C:\Program Files\Pico Technology\SDK\lib"
-picos = PicosMonitor.TC08USB(tempChannels, dll_path=picosDLLPath)
+picos = PicosMonitor.TC08USB(tempChannels, dll_path=picosDLLPath, channel_names="Hybrid_Temp")
 
 print 'Initializing NIDAQ'
 # initialize the pickoff monitor
@@ -90,9 +162,9 @@ MagSensorChannels = {"X": 'ai8',
                      "Y": 'ai9',
                      "Z": 'ai10'}
 
-MagConversion = {"X": lambda v: v,
-                 "Y": lambda v: v,
-                 "Z": lambda v: v}
+MagConversion = {"X": lambda v: 0.2*v,
+                 "Y": lambda v: 0.2*v,
+                 "Z": lambda v: 0.2*v}
 
 uWRabiChannels = {"Internal Mon": 'ai6',
                   "Circulator": 'ai7'}
@@ -102,15 +174,16 @@ uWRabiConversion = {"Internal Mon": lambda v: v,
 
 ADCChan = {"Hybrid_Beam_Balances": I2VChannels,
            "Hybrid_Mag": MagSensorChannels,
-           "Hybrid_Mux": MuxChannels}
-           #"Hybrid_uW": uWRabiChannels}
+           "Hybrid_Mux": MuxChannels,
+           "Hybrid_uW": uWRabiChannels}
 
 ADCCon = {"Hybrid_Beam_Balances": I2VConversion,
           "Hybrid_Mag": MagConversion,
-          "Hybrid_Mux": MuxConversion}
-          #"Hybrid_uW": uWRabiConversion}
+          "Hybrid_Mux": MuxConversion,
+          "Hybrid_uW": uWRabiConversion}
 
-NIDAQ = NIDAQMonitor.NIDAQmxAI(ADCChan, conversion=ADCCon)
+#NIDAQ = DummyMonitor.DummyMonitor(ADCChan,ADCChan.keys())
+NIDAQ = NIDAQMonitor.NIDAQmxAI(ADCChan, conversion=ADCCon,channel_names=ADCChan.keys())
 
 print 'grabbing config file'
 if len(sys.argv) > 1:
@@ -131,49 +204,25 @@ config.read(configfile)
 print 'grabbing server'
 serv = server(config)
 
-print 'opening channels'
+#print 'opening channels'
 # open the channels
-channels = []
+#channels = []
 #channels.append(Ch("Temp", "float", serv, tempChannels, picos))
-channels.append(Ch("Beam_Balances", "float", serv, I2VChannels, NIDAQ))
-channels.append(Ch("Mag", "float", serv, MagSensorChannels, NIDAQ))
-channels.append(Ch("Mux", "float", serv, MuxChannels, NIDAQ))
+#channels.append(Ch("Beam_Balances", "float", serv, I2VChannels, NIDAQ))
+#channels.append(Ch("Mag", "float", serv, MagSensorChannels, NIDAQ))
+#channels.append(Ch("Mux", "float", serv, MuxChannels, NIDAQ))
 #channels.append(Ch("uW","float",serv,uWRabiChannels,NIDAQ))
 
+Monitors = [NIDAQ,
+            picos]
 
 # This might need to be more complicated, but you get the gist. Keep sending records forever
-time.sleep(10)
 
-print 'begin communication'
-err = 0
-# TODO : Make timing consistent despite wait blocks in monitor classes
-# TODO : Write data to channels in multiple threads once the number of channels gets large
-while True:
-    try:
-        # t1 = time.clock()
-        for channel in channels:
-            print "sending " + channel.name
-            print "Measured :" + repr(channel.measure())
-            ts = current_time(config)
-            data = channel.data
-            data.update({TIMESTAMP: ts})
-            try:
-                channel.connection.send(**channel.data)
-            except Exception:
-                close_all(channels)
-                raise Exception
-            print(data)
-            # interrupt this with a keystroke and hang connection
-        if err == 1:
-            break
-        time.sleep(measurementPeriod)
-        # FOR TIMING:
-        # t2 = time.clock()
-        # deltaT = t2 - t1
-        # time.sleep(measurementPeriod - deltaT)
-
-    except KeyboardInterrupt:
-        # Trying to handle turning off the program monitor without leaving devices on and streams open
-        close_all(channels)
-        raise KeyboardInterrupt
-        break
+#qq = Queue.Queue()
+stop_event = threading.Event()
+mongui = GUI.MonitorGUI(measurementPeriod,"float",serv,Monitors)
+monthread = MonitorThread(mongui.channels,config,mongui.queues,stop_event)
+monthread.start()
+mongui.run()
+print "Exiting GUI."
+stop_event.set()

@@ -17,7 +17,7 @@ class Channel(object) :
         :param data_map: {String, data_names : Any, DAQ channels}
         :param monitor: Monitor, a monitor object through which we connect to our DAQ
         """
-        self.name = self.namespace + '_' + name
+        self.name = name# self.namespace + '_' + name
         self.data_type = data_type
         self.server = server
         self.data_map = data_map
@@ -56,5 +56,5 @@ class Channel(object) :
         :return: error code from the monitor class or the connection class
         """
         err_serv = self.connection.close()
-        err_monitor = self.monitor.close()
-        return [err_serv, err_monitor]
+        #err_monitor = self.monitor.close()
+        return err_serv
