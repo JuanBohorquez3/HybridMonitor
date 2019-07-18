@@ -245,11 +245,16 @@ class MonitorGUI:
             #data uploaded to dictionary in queue by MonitorThread, needs to be retrieved
             qitem = self.queues[chname].get() 
             t = qitem['measurement_time']
-            for dataname in self.channels[chname].data_names:
-                self.data[chname][dataname] = self.shift1(self.data[chname][dataname],qitem[dataname])
             
             #convert time from datestamp to datetime object format, add to time list
-            self.times[chname] = self.shift1(self.times[chname],datetime.fromtimestamp(t/2**32))
+            if self.times[chname][0] < self.times[chname][-1]-timedelta(days=1):
+                self.times[chname] = self.shift1(self.times[chname],datetime.fromtimestamp(t/2**32))
+                for dataname in self.channels[chname].data_names:
+                    self.data[chname][dataname] = self.shift1(self.data[chname][dataname],qitem[dataname])
+            else:
+                self.times[chname] = np.append(self.times[chname],datetime.fromtimestamp(t/2**32))
+                for dataname in self.channels[chname].data_names:
+                    self.data[chname][dataname] = np.append(self.data[chname][dataname],qitem[dataname])
             
             #number of points to average over based on time to avg/data time spacing
             navg = self.tavgslider.get()/self.waitsecs
@@ -257,6 +262,13 @@ class MonitorGUI:
             if self.plotchannels[chname]:
                 #create temporary time average array
                 temp_t = timeavg(self.times[chname],navg)
+                    
+                currentt = temp_t[-1]
+                timewindow = timedelta(seconds=self.tlimitslider.get()*60)
+                    
+                tlim_index = np.searchsorted(temp_t,currentt-timewindow)
+                    
+                plot_t = temp_t[tlim_index:]
             
                 #plot data for each field in channelstream
                 for j, dataname in enumerate(self.channels[chname].data_names):
@@ -265,13 +277,14 @@ class MonitorGUI:
                     tempdata = tempdata.reshape(-1,navg)
                     tempdata = np.nanmean(tempdata,axis=1)
                     
+                    plotdata = tempdata[tlim_index:]
+                    
                     self.lines[chname][dataname].set_xdata(temp_t)
                     self.lines[chname][dataname].set_ydata(tempdata)
                     
-                    currentt = temp_t[-1]
-                    timewindow = timedelta(seconds=self.tlimitslider.get()*60)
                     self.axes[chname][j].set_xlim([currentt-timewindow,currentt])
-                    self.axes[chname][j].set_ylim([np.amin(tempdata),np.amax(tempdata)])
+                    self.axes[chname][j].set_ylim([np.amin(plotdata),np.amax(plotdata)])
+                    
                     #self.figs[chname].autofmt_xdate()
                 self.figs[chname].canvas.draw()
                 self.figs[chname].canvas.flush_events()
