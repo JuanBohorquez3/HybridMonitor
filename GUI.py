@@ -38,7 +38,7 @@ class MonitorGUI:
     Uses thread-safe queues to get data passed from MonitorThread.
     Plots data vs. time for enabled channels.
     """
-    def __init__(self,waitsecs,datatype,serv,mons):
+    def __init__(self,waitsecs,datatypes,serv,mons):
         """
         Initialize GUI.
         Open channel selection dialog and connect to selected channels.
@@ -131,7 +131,7 @@ class MonitorGUI:
         #openchannels tracks open channels and plotchannels tracks channels actively plotted
         self.openchannels = {}
         self.plotchannels = {}
-        self.datatype = datatype
+        self.datatypes = datatypes
         self.serv = serv
             
         self.queues = {}
@@ -190,7 +190,7 @@ class MonitorGUI:
         self.defaultchannels = d.result
         
         for chname in self.defaultchannels:
-            self.open_channel(chname,datatype,serv,self.chmonitor[chname])
+            self.open_channel(chname,datatypes[chname],serv,self.chmonitor[chname])
         
         self.start()
     
@@ -321,7 +321,7 @@ class MonitorGUI:
     def open_plot(self,chname):
         #create window and canvas to plot in
         if not self.openchannels[chname]:
-            self.open_channel(chname,self.datatype,self.serv,self.chmonitor[chname])
+            self.open_channel(chname,self.datatypes[chname],self.serv,self.chmonitor[chname])
         self.windows.update({chname : Toplevel()})
         self.windows[chname].title(chname)
         self.windows[chname].protocol("WM_DELETE_WINDOW", partial(self.close_plot,chname))
@@ -398,7 +398,7 @@ class MonitorGUI:
         if self.openchannels[chname]:
             self.close_channel(chname)
         else:
-            self.open_channel(chname,self.datatype,self.serv,self.chmonitor[chname])
+            self.open_channel(chname,self.datatypes[chname],self.serv,self.chmonitor[chname])
         
     def toggle_plot(self,chname):
         if self.plotchannels[chname]:

@@ -188,6 +188,12 @@ ADCCon = {"Hybrid_Beam_Balances": I2VConversion,
           "Hybrid_uW": uWRabiConversion,
           "Hybrid_Locks": lockConversion}
 
+ADCDatatypes = {"Hybrid_Beam_Balances": "float",
+          "Hybrid_Mag": "float",
+          "Hybrid_Mux": "float",
+          "Hybrid_uW": "float",
+          "Hybrid_Locks": "int"}
+
 NIDAQ = DummyMonitor.DummyMonitor(ADCChan,ADCChan.keys())
 #NIDAQ = NIDAQMonitor.NIDAQmxAI(ADCChan, conversion=ADCCon,channel_names=ADCChan.keys())
 
@@ -226,7 +232,7 @@ Monitors = [NIDAQ,
 
 #qq = Queue.Queue()
 stop_event = threading.Event()
-mongui = GUI.MonitorGUI(measurementPeriod,"float",serv,Monitors)
+mongui = GUI.MonitorGUI(measurementPeriod,ADCDatatypes,serv,Monitors)
 monthread = MonitorThread(mongui.channels,config,mongui.queues,stop_event)
 monthread.start()
 mongui.run()
