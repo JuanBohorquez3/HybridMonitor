@@ -114,11 +114,11 @@ print fullBinPath
 fullBasePath = os.path.dirname(fullBinPath)
 print fullBasePath
 ## Works on Hybrid Machine
-#fullLibPath = os.path.join(fullBasePath, "origin\\origin\\lib")
-#fullCfgPath = os.path.join(fullBasePath, "origin\\origin\\config")
+fullLibPath = os.path.join(fullBasePath, "origin\\origin\\lib")
+fullCfgPath = os.path.join(fullBasePath, "origin\\origin\\config")
 ## Works on Danny's Machine
-fullLibPath = os.path.join(fullBasePath, "C:\\Users\\Wendt\\Documents\\Hybrid\\Origin\\lib")
-fullCfgPath = os.path.join(fullBasePath, "C:\\Users\\Wendt\\Documents\\Hybrid\\Origin\\config")
+#fullLibPath = os.path.join(fullBasePath, "C:\\Users\\Wendt\\Documents\\Hybrid\\Origin\\lib")
+#fullCfgPath = os.path.join(fullBasePath, "C:\\Users\\Wendt\\Documents\\Hybrid\\Origin\\config")
 sys.path.append(fullLibPath)
 
 print 'getting origin library'
