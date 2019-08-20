@@ -62,11 +62,11 @@ class MonitorThread(threading.Thread):
                     data.update({TIMESTAMP: ts})
                     #print(data)
 ### Following try/except loop enables upload data to server
-#                    try:
-#                        channel.connection.send(**channel.data)
-#                    except Exception:
-#                        close_all(self.channels.values())
-#                        raise Exception
+                    try:
+                        channel.connection.send(**channel.data)
+                    except Exception:
+                        close_all(self.channels.values())
+                        raise Exception
                     self.queues[channel.name].put(data)
             # interrupt this with a keystroke and hang connection
                 if self.err == 1:
@@ -147,12 +147,12 @@ I2VChannels = {"X1": 'ai4',
                "Z1": 'ai3',
                "Z2": 'ai5'}
 # pickoff conversions
-I2VConversion = {"X1": lambda v: 0.758*v+0.031,
-                 "X2": lambda v: 0.380*v+0.041,
-                 "Y1": lambda v: 1.020*v-0.108,
-                 "Y2": lambda v: 1.000*v-0.080,
-                 "Z1": lambda v: 0.525*v-0.019,
-                 "Z2": lambda v: 1.711*v-0.068}
+I2VConversion = {"X1": lambda v: 0.740*v+0.026,
+                 "X2": lambda v: 0.543*v+0.017,
+                 "Y1": lambda v: 0.902*v+0.022,
+                 "Y2": lambda v: 0.849*v+0.028,
+                 "Z1": lambda v: 0.562*v+0.020,
+                 "Z2": lambda v: 2.163*v+0.032}
 
 MuxChannels = {"FORT": "ai6"}
 

@@ -12,8 +12,8 @@ import numpy as np
 from Channel import Channel as Ch
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from pandas.plotting import register_matplotlib_converters
-register_matplotlib_converters()
+#from pandas.plotting import register_matplotlib_converters
+#register_matplotlib_converters()
 from functools import partial
 from datetime import datetime, timedelta
 from matplotlib.dates import DateFormatter
