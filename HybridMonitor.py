@@ -172,9 +172,11 @@ uWRabiChannels = {"Internal Mon": 'ai6',
 uWRabiConversion = {"Internal Mon": lambda v: v,
                     "Circulator": lambda v: v}
 
-lockChannel = {"1190": 'ai11'}
+lockChannel = {"1190 Lock": 'ai11',
+               "1190 Warn": 'ai12'}
 
-lockConversion = {"1190": lambda v: v}
+lockConversion = {"1190 Lock": lambda v: v,
+                  "1190 Warn": lambda v: v}
 
 ADCChan = {"Hybrid_Beam_Balances": I2VChannels,
            "Hybrid_Mag": MagSensorChannels,
@@ -194,8 +196,8 @@ ADCDatatypes = {"Hybrid_Beam_Balances": "float",
           "Hybrid_uW": "float",
           "Hybrid_Locks": "int"}
 
-NIDAQ = DummyMonitor.DummyMonitor(ADCChan,ADCChan.keys())
-#NIDAQ = NIDAQMonitor.NIDAQmxAI(ADCChan, conversion=ADCCon,channel_names=ADCChan.keys())
+#NIDAQ = DummyMonitor.DummyMonitor(ADCChan,ADCChan.keys())
+NIDAQ = NIDAQMonitor.NIDAQmxAI(ADCChan, conversion=ADCCon,channel_names=ADCChan.keys())
 
 print 'grabbing config file'
 if len(sys.argv) > 1:
