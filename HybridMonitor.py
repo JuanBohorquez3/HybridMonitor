@@ -117,8 +117,8 @@ print fullBasePath
 fullLibPath = os.path.join(fullBasePath, "origin\\origin\\lib")
 fullCfgPath = os.path.join(fullBasePath, "origin\\origin\\config")
 ## Works on Danny's Machine
-#fullLibPath = os.path.join(fullBasePath, "D:\\Repositories\\Origin\\lib")
-#fullCfgPath = os.path.join(fullBasePath, "D:\\Repositories\\Origin\\config")
+#fullLibPath = os.path.join(fullBasePath, "C:\\Users\\Wendt\\Documents\\Hybrid\\Origin\\lib")
+#fullCfgPath = os.path.join(fullBasePath, "C:\\Users\\Wendt\\Documents\\Hybrid\\Origin\\config")
 sys.path.append(fullLibPath)
 
 print 'getting origin library'
@@ -172,18 +172,30 @@ uWRabiChannels = {"Internal Mon": 'ai6',
 uWRabiConversion = {"Internal Mon": lambda v: v,
                     "Circulator": lambda v: v}
 
+lockChannel = {"1190": 'ai11'}
+
+lockConversion = {"1190": lambda v: v}
+
 ADCChan = {"Hybrid_Beam_Balances": I2VChannels,
            "Hybrid_Mag": MagSensorChannels,
            "Hybrid_Mux": MuxChannels,
-           "Hybrid_uW": uWRabiChannels}
+           "Hybrid_uW": uWRabiChannels,
+           "Hybrid_Locks": lockChannel}
 
 ADCCon = {"Hybrid_Beam_Balances": I2VConversion,
           "Hybrid_Mag": MagConversion,
           "Hybrid_Mux": MuxConversion,
-          "Hybrid_uW": uWRabiConversion}
+          "Hybrid_uW": uWRabiConversion,
+          "Hybrid_Locks": lockConversion}
 
-#NIDAQ = DummyMonitor.DummyMonitor(ADCChan,ADCChan.keys())
-NIDAQ = NIDAQMonitor.NIDAQmxAI(ADCChan, conversion=ADCCon,channel_names=ADCChan.keys())
+ADCDatatypes = {"Hybrid_Beam_Balances": "float",
+          "Hybrid_Mag": "float",
+          "Hybrid_Mux": "float",
+          "Hybrid_uW": "float",
+          "Hybrid_Locks": "int"}
+
+NIDAQ = DummyMonitor.DummyMonitor(ADCChan,ADCChan.keys())
+#NIDAQ = NIDAQMonitor.NIDAQmxAI(ADCChan, conversion=ADCCon,channel_names=ADCChan.keys())
 
 print 'grabbing config file'
 if len(sys.argv) > 1:
@@ -220,7 +232,7 @@ Monitors = [NIDAQ,
 
 #qq = Queue.Queue()
 stop_event = threading.Event()
-mongui = GUI.MonitorGUI(measurementPeriod,"float",serv,Monitors)
+mongui = GUI.MonitorGUI(measurementPeriod,ADCDatatypes,serv,Monitors)
 monthread = MonitorThread(mongui.channels,config,mongui.queues,stop_event)
 monthread.start()
 mongui.run()

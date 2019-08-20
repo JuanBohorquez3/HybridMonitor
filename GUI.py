@@ -38,7 +38,7 @@ class MonitorGUI:
     Uses thread-safe queues to get data passed from MonitorThread.
     Plots data vs. time for enabled channels.
     """
-    def __init__(self,waitsecs,datatype,serv,mons):
+    def __init__(self,waitsecs,datatypes,serv,mons):
         """
         Initialize GUI.
         Open channel selection dialog and connect to selected channels.
@@ -131,7 +131,7 @@ class MonitorGUI:
         #openchannels tracks open channels and plotchannels tracks channels actively plotted
         self.openchannels = {}
         self.plotchannels = {}
-        self.datatype = datatype
+        self.datatypes = datatypes
         self.serv = serv
             
         self.queues = {}
@@ -190,7 +190,7 @@ class MonitorGUI:
         self.defaultchannels = d.result
         
         for chname in self.defaultchannels:
-            self.open_channel(chname,datatype,serv,self.chmonitor[chname])
+            self.open_channel(chname,datatypes[chname],serv,self.chmonitor[chname])
         
         self.start()
     
@@ -247,7 +247,7 @@ class MonitorGUI:
             t = qitem['measurement_time']
             
             #convert time from datestamp to datetime object format, add to time list
-            if self.times[chname][0] < self.times[chname][-1]-timedelta(days=1):
+            if len(self.times[chname]) > 0 and self.times[chname][0] < self.times[chname][-1]-timedelta(days=1):
                 self.times[chname] = self.shift1(self.times[chname],datetime.fromtimestamp(t/2**32))
                 for dataname in self.channels[chname].data_names:
                     self.data[chname][dataname] = self.shift1(self.data[chname][dataname],qitem[dataname])
@@ -321,7 +321,7 @@ class MonitorGUI:
     def open_plot(self,chname):
         #create window and canvas to plot in
         if not self.openchannels[chname]:
-            self.open_channel(chname,self.datatype,self.serv,self.chmonitor[chname])
+            self.open_channel(chname,self.datatypes[chname],self.serv,self.chmonitor[chname])
         self.windows.update({chname : Toplevel()})
         self.windows[chname].title(chname)
         self.windows[chname].protocol("WM_DELETE_WINDOW", partial(self.close_plot,chname))
@@ -333,6 +333,10 @@ class MonitorGUI:
         
         self.scrollbars.update({chname : Scrollbar(self.windows[chname])})
         self.scrollbars[chname].pack(side=RIGHT,fill=Y)
+        
+        for j, dataname in enumerate(self.channels[chname].data_names):
+            self.axes[chname][j].cla()
+            self.lines[chname][dataname], = self.axes[chname][j].plot(self.times[chname],self.data[chname][dataname])
         
         self.canvases.update({chname : FigureCanvasTkAgg(self.figs[chname],temp)})
         
@@ -394,7 +398,7 @@ class MonitorGUI:
         if self.openchannels[chname]:
             self.close_channel(chname)
         else:
-            self.open_channel(chname,self.datatype,self.serv,self.chmonitor[chname])
+            self.open_channel(chname,self.datatypes[chname],self.serv,self.chmonitor[chname])
         
     def toggle_plot(self,chname):
         if self.plotchannels[chname]:
@@ -434,8 +438,13 @@ class MonitorGUI:
                         for timestamp in time_data:
                             self.times[stream].append(datetime.fromtimestamp(timestamp/2**32))
                         self.times[stream] = np.array(self.times[stream])
+                    elif field == u'error':
+                        print "Error:", stream_data[stream][field]
+                    elif field == u'stream':
+                        pass
                     else:
                         self.data[stream][field] = np.array(stream_data[stream][field])
+                        print field
                 except Exception as e:
                     print 'Error in getting stream %s, field %s: %s' % (stream, field, e)
             
