@@ -244,21 +244,22 @@ class MonitorGUI:
                 self.axes[chname][j].cla()
                 self.data[chname][dataname].append(qitem[dataname])
                 
-                temp_t = np.array(self.times[chname])
-                temp_t = timeavg(temp_t,navg)
+                if self.plotchannels[chname]:
+                    temp_t = np.array(self.times[chname])
+                    temp_t = timeavg(temp_t,navg)
                 
-                #data averaging done in temporary way in case navg changes
-                tempdata = np.array(self.data[chname][dataname])
-                tempdata = np.pad(tempdata,(0, (navg-tempdata.size%navg)%navg),mode='constant',constant_values=np.NaN)
-                tempdata = tempdata.reshape(-1,navg)
-                tempdata = np.nanmean(tempdata,axis=1)
+                    #data averaging done in temporary way in case navg changes
+                    tempdata = np.array(self.data[chname][dataname])
+                    tempdata = np.pad(tempdata,(0, (navg-tempdata.size%navg)%navg),mode='constant',constant_values=np.NaN)
+                    tempdata = tempdata.reshape(-1,navg)
+                    tempdata = np.nanmean(tempdata,axis=1)
                 
-                self.axes[chname][j].plot(temp_t,tempdata)
-                self.axes[chname][j].set_title(dataname)
-                currentt = temp_t[-1]
-                timewindow = timedelta(seconds=self.tlimitslider.get()*60)
-                self.axes[chname][j].set_xlim([currentt-timewindow,currentt])
-            #self.figs[chname].autofmt_xdate()
+                    self.axes[chname][j].plot(temp_t,tempdata)
+                    self.axes[chname][j].set_title(dataname)
+                    currentt = temp_t[-1]
+                    timewindow = timedelta(seconds=self.tlimitslider.get()*60)
+                    self.axes[chname][j].set_xlim([currentt-timewindow,currentt])
+                    #self.figs[chname].autofmt_xdate()
             if self.plotchannels[chname]:
                 self.canvases[chname].draw()
             
