@@ -247,7 +247,7 @@ class MonitorGUI:
             t = qitem['measurement_time']
             
             #convert time from datestamp to datetime object format, add to time list
-            if self.times[chname][0] < self.times[chname][-1]-timedelta(days=1):
+            if len(self.times[chname]) > 0 and self.times[chname][0] < self.times[chname][-1]-timedelta(days=1):
                 self.times[chname] = self.shift1(self.times[chname],datetime.fromtimestamp(t/2**32))
                 for dataname in self.channels[chname].data_names:
                     self.data[chname][dataname] = self.shift1(self.data[chname][dataname],qitem[dataname])
@@ -333,6 +333,10 @@ class MonitorGUI:
         
         self.scrollbars.update({chname : Scrollbar(self.windows[chname])})
         self.scrollbars[chname].pack(side=RIGHT,fill=Y)
+        
+        for j, dataname in enumerate(self.channels[chname].data_names):
+            self.axes[chname][j].cla()
+            self.lines[chname][dataname], = self.axes[chname][j].plot(self.times[chname],self.data[chname][dataname])
         
         self.canvases.update({chname : FigureCanvasTkAgg(self.figs[chname],temp)})
         
@@ -434,8 +438,13 @@ class MonitorGUI:
                         for timestamp in time_data:
                             self.times[stream].append(datetime.fromtimestamp(timestamp/2**32))
                         self.times[stream] = np.array(self.times[stream])
+                    elif field == u'error':
+                        print "Error:", stream_data[stream][field]
+                    elif field == u'stream':
+                        pass
                     else:
                         self.data[stream][field] = np.array(stream_data[stream][field])
+                        print field
                 except Exception as e:
                     print 'Error in getting stream %s, field %s: %s' % (stream, field, e)
             
