@@ -117,6 +117,8 @@ print fullBasePath
 #fullLibPath = os.path.join(fullBasePath, "origin\\origin\\lib")
 #fullCfgPath = os.path.join(fullBasePath, "origin\\origin\\config")
 ## Works on Danny's Machine
+#fullLibPath = os.path.join(fullBasePath, "D:\\Repositories\\Origin\\lib")
+#fullCfgPath = os.path.join(fullBasePath, "D:\\Repositories\\Origin\\config")
 fullLibPath = os.path.join(fullBasePath, "C:\\Users\\Wendt\\Documents\\Hybrid\\Origin\\lib")
 fullCfgPath = os.path.join(fullBasePath, "C:\\Users\\Wendt\\Documents\\Hybrid\\Origin\\config")
 sys.path.append(fullLibPath)
@@ -162,9 +164,9 @@ MagSensorChannels = {"X": 'ai8',
                      "Y": 'ai9',
                      "Z": 'ai10'}
 
-MagConversion = {"X": lambda v: v,
-                 "Y": lambda v: v,
-                 "Z": lambda v: v}
+MagConversion = {"X": lambda v: 0.2*v,
+                 "Y": lambda v: 0.2*v,
+                 "Z": lambda v: 0.2*v}
 
 uWRabiChannels = {"Internal Mon": 'ai6',
                   "Circulator": 'ai7'}
@@ -204,7 +206,7 @@ config.read(configfile)
 print 'grabbing server'
 serv = server(config)
 
-print 'opening channels'
+#print 'opening channels'
 # open the channels
 #channels = []
 #channels.append(Ch("Temp", "float", serv, tempChannels, picos))
@@ -217,7 +219,6 @@ Monitors = [NIDAQ,
             picos]
 
 # This might need to be more complicated, but you get the gist. Keep sending records forever
-time.sleep(2)
 
 #qq = Queue.Queue()
 stop_event = threading.Event()

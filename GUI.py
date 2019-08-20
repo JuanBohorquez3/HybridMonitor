@@ -12,8 +12,11 @@ import numpy as np
 from Channel import Channel as Ch
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from pandas.plotting import register_matplotlib_converters
+register_matplotlib_converters()
 from functools import partial
 from datetime import datetime, timedelta
+from matplotlib.dates import DateFormatter
 import time
 import Queue
 import zmq
@@ -130,10 +133,6 @@ class MonitorGUI:
         self.plotchannels = {}
         self.datatype = datatype
         self.serv = serv
-        
-        # open channels requested by user in initial dialog
-        d = ChannelOpenDialog(self.root,self.channelnames)
-        self.defaultchannels = d.result
             
         self.queues = {}
         for name in self.channelnames:
@@ -149,7 +148,9 @@ class MonitorGUI:
         
         self.figs = {}
         self.axes = {}
+        self.lines = {}
         self.canvases = {}
+        self.scrollbars = {}
         self.windows = {}
         
         self.buttonframe = Frame(self.root)
@@ -175,15 +176,21 @@ class MonitorGUI:
             self.data.update({chname : {}})
             self.figs.update({chname : Figure(figsize=(8,1.5*len(self.channeldict[chname])))})
             self.axes.update({chname : []})
+            self.lines.update({chname : {}})
             for i, dataname in enumerate(self.channeldict[chname]):
                 self.data[chname][dataname] = []
                 self.axes[chname].append(self.figs[chname].add_subplot(len(self.channeldict[chname]),1,i+1))
-                self.figs[chname].tight_layout()
+                self.axes[chname][i].xaxis.set_major_formatter(DateFormatter('%H:%M'))
+                self.figs[chname].set_tight_layout(True)
+        
+        self.get_origin_data()
+        
+        # open channels requested by user in initial dialog
+        d = ChannelOpenDialog(self.root,self.channelnames)
+        self.defaultchannels = d.result
         
         for chname in self.defaultchannels:
             self.open_channel(chname,datatype,serv,self.chmonitor[chname])
-        
-        self.get_origin_data('x')
         
         self.start()
     
@@ -191,6 +198,7 @@ class MonitorGUI:
         self.root.mainloop()
         
     def set_tlim(self,event):
+        #set time window limit based on typed time
         try:
             self.tlimmin.set(int(self.tlimmin_display.get()))
             self.tlimitslider.set(self.tlimmin.get()+60*self.tlimhrs.get())
@@ -202,6 +210,7 @@ class MonitorGUI:
         #print(self.tlim.get())
     
     def set_tavg(self,event):
+        #set time to average over based on typed time
         try:
             self.tavgsec.set(int(self.tavgsec_display.get()))
             self.tavgslider.set(self.tavgsec.get()+60*self.tavgmin.get())
@@ -212,6 +221,7 @@ class MonitorGUI:
             tkMessageBox.showerror("Error","Invalid entry. Please enter a number.\nError: %s" % e)
     
     def set_entries(self,event):
+        #set time window and average time based on slider values
         self.tlimmin.set(self.tlimitslider.get()%60)
         self.tlimmin_display.set("%02d" % self.tlimmin.get())
         self.tlimhrs.set((self.tlimitslider.get()-self.tlimmin.get())/60)
@@ -226,54 +236,76 @@ class MonitorGUI:
             self.root.after(1000*self.waitsecs,self.plot_all)
     
     def plot_channel(self,chname):
-        #will collect data and add to figure even when figure not displayed in plot
+        #will still collect data when plotchannels is False
+        #will only average and plot data when plotchannels is True
         
         while not self.queues[chname].empty():
+            
+            
             #data uploaded to dictionary in queue by MonitorThread, needs to be retrieved
             qitem = self.queues[chname].get() 
             t = qitem['measurement_time']
             
             #convert time from datestamp to datetime object format, add to time list
-            self.times[chname].append(datetime.fromtimestamp(t/2**32))
+            if self.times[chname][0] < self.times[chname][-1]-timedelta(days=1):
+                self.times[chname] = self.shift1(self.times[chname],datetime.fromtimestamp(t/2**32))
+                for dataname in self.channels[chname].data_names:
+                    self.data[chname][dataname] = self.shift1(self.data[chname][dataname],qitem[dataname])
+            else:
+                self.times[chname] = np.append(self.times[chname],datetime.fromtimestamp(t/2**32))
+                for dataname in self.channels[chname].data_names:
+                    self.data[chname][dataname] = np.append(self.data[chname][dataname],qitem[dataname])
             
             #number of points to average over based on time to avg/data time spacing
             navg = self.tavgslider.get()/self.waitsecs
             
-            #plot data for each field in channelstream
-            for j, dataname in enumerate(self.channels[chname].data_names):
-                self.axes[chname][j].cla()
-                self.data[chname][dataname].append(qitem[dataname])
-                
-                if self.plotchannels[chname]:
-                    temp_t = np.array(self.times[chname])
-                    temp_t = timeavg(temp_t,navg)
-                
+            if self.plotchannels[chname]:
+                #create temporary time average array
+                temp_t = timeavg(self.times[chname],navg)
+                    
+                currentt = temp_t[-1]
+                timewindow = timedelta(seconds=self.tlimitslider.get()*60)
+                    
+                tlim_index = np.searchsorted(temp_t,currentt-timewindow)
+                    
+                plot_t = temp_t[tlim_index:]
+            
+                #plot data for each field in channelstream
+                for j, dataname in enumerate(self.channels[chname].data_names):
                     #data averaging done in temporary way in case navg changes
-                    tempdata = np.array(self.data[chname][dataname])
-                    tempdata = np.pad(tempdata,(0, (navg-tempdata.size%navg)%navg),mode='constant',constant_values=np.NaN)
+                    tempdata = np.pad(self.data[chname][dataname],(0, (navg-self.data[chname][dataname].size%navg)%navg),mode='constant',constant_values=np.NaN)
                     tempdata = tempdata.reshape(-1,navg)
                     tempdata = np.nanmean(tempdata,axis=1)
-                
-                    self.axes[chname][j].plot(temp_t,tempdata)
-                    self.axes[chname][j].set_title(dataname)
-                    currentt = temp_t[-1]
-                    timewindow = timedelta(seconds=self.tlimitslider.get()*60)
+                    
+                    plotdata = tempdata[tlim_index:]
+                    
+                    self.lines[chname][dataname].set_xdata(temp_t)
+                    self.lines[chname][dataname].set_ydata(tempdata)
+                    
                     self.axes[chname][j].set_xlim([currentt-timewindow,currentt])
+                    self.axes[chname][j].set_ylim([np.amin(plotdata),np.amax(plotdata)])
+                    
                     #self.figs[chname].autofmt_xdate()
-            if self.plotchannels[chname]:
-                self.canvases[chname].draw()
-            
-            #prune extraneous data, only 24h of data saved in buffer
-            while self.times[chname][0] < self.times[chname][-1]-timedelta(days=1):
-                self.times[chname] = self.times[chname][1:]
-                for field in self.data[chname]:
-                    self.data[chname][field] = self.data[chname][field][1:]
+                self.figs[chname].canvas.draw()
+                self.figs[chname].canvas.flush_events()
+                #self.canvases[chname].draw()
+    
+    def shift1(self, arr, value=np.nan):
+        #efficient shifting algorithm to discard first element and add value at end
+        result = np.empty_like(arr)
+        result[-1] = value
+        result[:-1] = arr[1:]
+        return result
             
     def start(self,event=None):
         try:
             self.started=True
             self.plot_all()
-            print "Started plotting."
+            for chname in self.channelnames:
+                for j,dataname in enumerate(self.channeldict[chname]):
+                    self.lines[chname][dataname], = self.axes[chname][j].plot(self.times[chname],self.data[chname][dataname])
+                    self.axes[chname][j].set_title(dataname)
+            print "Started GUI."
         except Exception as e:
             print e
             tkMessageBox.showerror("Error","Error in plotting. Please try again.\nError: %s" % e)
@@ -293,8 +325,24 @@ class MonitorGUI:
         self.windows.update({chname : Toplevel()})
         self.windows[chname].title(chname)
         self.windows[chname].protocol("WM_DELETE_WINDOW", partial(self.close_plot,chname))
-        self.canvases.update({chname : FigureCanvasTkAgg(self.figs[chname],self.windows[chname])})
-        self.canvases[chname].get_tk_widget().pack(fill=BOTH,expand=1,padx=5,pady=5)
+        self.windows[chname].resizable(width=False, height=True)
+        
+        size=self.figs[chname].get_size_inches()*self.figs[chname].dpi
+        temp = Canvas(master=self.windows[chname],width=size[0],height=4*self.figs[chname].dpi)
+        temp.pack(side=LEFT,fill=Y,expand=1,padx=5,pady=5)
+        
+        self.scrollbars.update({chname : Scrollbar(self.windows[chname])})
+        self.scrollbars[chname].pack(side=RIGHT,fill=Y)
+        
+        self.canvases.update({chname : FigureCanvasTkAgg(self.figs[chname],temp)})
+        
+        temp.config(yscrollcommand=self.scrollbars[chname].set)
+        self.scrollbars[chname].config(command=temp.yview)
+        temp.create_window(0,0,window=self.canvases[chname].get_tk_widget(),anchor=NW)
+        temp.config(scrollregion=temp.bbox(ALL))
+        temp.bind('<Enter>',partial(self.bind_mousewheel,temp))
+        temp.bind('<Leave>',partial(self.unbind_mousewheel,temp))
+        
         self.canvases[chname].draw()
         self.plotbuttons[chname].config(text="Close plot",relief=SUNKEN)
         self.plotchannels[chname] = True
@@ -318,6 +366,15 @@ class MonitorGUI:
         self.windows[chname].destroy()
         self.plotbuttons[chname].config(text="Open plot",relief=RAISED)
         self.plotchannels[chname] = False
+        
+    def bind_mousewheel(self,canv,event):
+        canv.bind_all("<MouseWheel>", partial(self.on_mousewheel,canv))
+        
+    def unbind_mousewheel(self,canv,event):
+        canv.unbind_all("<MouseWheel>")
+        
+    def on_mousewheel(self,canv,event):
+        canv.yview_scroll(int(-1*(event.delta/120)),"units")
     
     def on_closing(self):
         #executed when root window is closed, closes all channels
@@ -345,7 +402,7 @@ class MonitorGUI:
         else:
             self.open_plot(chname)
     
-    def get_origin_data(self,chname):
+    def get_origin_data(self):
         config = self.serv.config
         context = zmq.Context()
         socket = context.socket(zmq.REQ)
@@ -354,19 +411,17 @@ class MonitorGUI:
         host = 'hexlabmonitor.physics.wisc.edu' 
         port = 5561
         socket.connect("tcp://%s:%s" % (host,port))
-        stream_test_list = self.channelnames
         start = 24*60*60
         stop = 0*24*60*60
         
         stream_data = {}
         
-        for stream in stream_test_list: 
+        for stream in self.channelnames: 
             print "sending raw read request for stream %s" % stream
             request_obj = {'stream': stream, 'raw': True, 'start': time.time()-start, 'stop':time.time()-stop}
             socket.send(json.dumps(request_obj))
             response = socket.recv()
             dat = json.loads(response)
-            indicator = dat[0]
             truedata = dat[1]
             stream_data[stream] = truedata
             fields = stream_data[stream].keys()
@@ -376,14 +431,16 @@ class MonitorGUI:
                 try: 
                     if field == u'measurement_time':
                         time_data = stream_data[stream][field]
-                        print 'time length', len(time_data)
                         for timestamp in time_data:
                             self.times[stream].append(datetime.fromtimestamp(timestamp/2**32))
+                        self.times[stream] = np.array(self.times[stream])
                     else:
-                        self.data[stream][field] = stream_data[stream][field]
-                        print 'data length', len(self.data[stream][field])
+                        self.data[stream][field] = np.array(stream_data[stream][field])
                 except Exception as e:
                     print 'Error in getting stream %s, field %s: %s' % (stream, field, e)
+            
+            
+            
             
         
 class ChannelOpenDialog(Toplevel):
