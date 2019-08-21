@@ -186,8 +186,8 @@ class MonitorGUI:
         self.get_origin_data()
         
         # open channels requested by user in initial dialog
-        d = ChannelOpenDialog(self.root,self.channelnames)
-        self.defaultchannels = d.result
+        #d = ChannelOpenDialog(self.root,self.channelnames)
+        #self.defaultchannels = d.result
         
         for chname in self.defaultchannels:
             self.open_channel(chname,datatypes[chname],serv,self.chmonitor[chname])

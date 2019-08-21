@@ -191,10 +191,10 @@ ADCCon = {"Hybrid_Beam_Balances": I2VConversion,
           "Hybrid_Locks": lockConversion}
 
 ADCDatatypes = {"Hybrid_Beam_Balances": "float",
-          "Hybrid_Mag": "float",
-          "Hybrid_Mux": "float",
-          "Hybrid_uW": "float",
-          "Hybrid_Locks": "int"}
+                "Hybrid_Mag": "float",
+                "Hybrid_Mux": "float",
+                "Hybrid_uW": "float",
+                "Hybrid_Locks": "int"}
 
 #NIDAQ = DummyMonitor.DummyMonitor(ADCChan,ADCChan.keys())
 NIDAQ = NIDAQMonitor.NIDAQmxAI(ADCChan, conversion=ADCCon,channel_names=ADCChan.keys())
