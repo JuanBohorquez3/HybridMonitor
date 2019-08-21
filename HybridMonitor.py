@@ -175,8 +175,8 @@ uWRabiConversion = {"Internal Mon": lambda v: v,
 lockChannel = {"1190 Lock": 'ai11',
                "1190 Warn": 'ai12'}
 
-lockConversion = {"1190 Lock": lambda v: v,
-                  "1190 Warn": lambda v: v}
+lockConversion = {"1190 Lock": lambda v: 0.25*v,
+                  "1190 Warn": lambda v: 0.25*v}
 
 ADCChan = {"Hybrid_Beam_Balances": I2VChannels,
            "Hybrid_Mag": MagSensorChannels,

@@ -260,43 +260,56 @@ class MonitorGUI:
             navg = self.tavgslider.get()/self.waitsecs
             
             if self.plotchannels[chname]:
-                #create temporary time average array
-                temp_t = timeavg(self.times[chname],navg)
-                    
-                currentt = temp_t[-1]
+
                 timewindow = timedelta(seconds=self.tlimitslider.get()*60)
-                    
-                tlim_index = np.searchsorted(temp_t,currentt-timewindow)
-                    
-                plot_t = temp_t[tlim_index:]
-            
-                #plot data for each field in channelstream
-                for j, dataname in enumerate(self.channels[chname].data_names):
-                    #data averaging done in temporary way in case navg changes
-                    tempdata = np.pad(self.data[chname][dataname],(0, (navg-self.data[chname][dataname].size%navg)%navg),mode='constant',constant_values=np.NaN)
-                    tempdata = tempdata.reshape(-1,navg)
-                    tempdata = np.nanmean(tempdata,axis=1)
-                    
-                    plotdata = tempdata[tlim_index:]
-                    
-                    self.lines[chname][dataname].set_xdata(temp_t)
-                    self.lines[chname][dataname].set_ydata(tempdata)
-                    
-                    self.axes[chname][j].set_xlim([currentt-timewindow,currentt])
-                    self.axes[chname][j].set_ylim([np.amin(plotdata),np.amax(plotdata)])
-                    
+
+                if self.datatypes[chname] == 'float':
+                    #create temporary time average array
+                    temp_t = timeavg(self.times[chname],navg)
+
+                    currentt = temp_t[-1]
+                    tlim_index = np.searchsorted(temp_t,currentt-timewindow)
+                    plot_t = temp_t[tlim_index:]
+
+                    #plot data for each field in channelstream
+                    for j, dataname in enumerate(self.channels[chname].data_names):
+                        #data averaging done in temporary way in case navg changes
+                        tempdata = np.pad(self.data[chname][dataname],(0, (navg-self.data[chname][dataname].size%navg)%navg),mode='constant',constant_values=np.NaN)
+                        tempdata = tempdata.reshape(-1,navg)
+                        tempdata = np.nanmean(tempdata,axis=1)
+
+                        plotdata = tempdata[tlim_index:]
+
+                        self.lines[chname][dataname].set_xdata(temp_t)
+                        self.lines[chname][dataname].set_ydata(tempdata)
+
+                        self.axes[chname][j].set_xlim([currentt-timewindow,currentt])
+                        self.axes[chname][j].set_ylim([np.amin(plotdata),np.amax(plotdata)])
+
                     #self.figs[chname].autofmt_xdate()
+                else:
+                    currentt = self.times[chname][-1]
+
+                    for j, dataname in enumerate(self.channels[chname].data_names):
+                        tempdata = self.data[chname][dataname].astype(int)
+
+                        self.lines[chname][dataname].set_xdata(self.times[chname])
+                        self.lines[chname][dataname].set_ydata(tempdata)
+
+                        self.axes[chname][j].set_xlim([currentt-timewindow,currentt])
+                        self.axes[chname][j].set_ylim([np.amin(tempdata),np.amax(tempdata)])
+
                 self.figs[chname].canvas.draw()
                 self.figs[chname].canvas.flush_events()
                 #self.canvases[chname].draw()
-    
+
     def shift1(self, arr, value=np.nan):
         #efficient shifting algorithm to discard first element and add value at end
         result = np.empty_like(arr)
         result[-1] = value
         result[:-1] = arr[1:]
         return result
-            
+
     def start(self,event=None):
         try:
             self.started=True
@@ -309,15 +322,15 @@ class MonitorGUI:
         except Exception as e:
             print e
             tkMessageBox.showerror("Error","Error in plotting. Please try again.\nError: %s" % e)
-    
+
     def open_channel(self,chname, datatype, serv, mon):
         #open channel by creating channel object and add to channel
         self.channels.update({chname : Ch(chname,datatype,serv,self.channeldict[chname],mon)})
         self.openchannels.update({chname : True})
         self.buttons[chname].config(bg="green",relief=RAISED,text="%s (open)"%chname)
-        
+
         #self.open_plot(chname)
-    
+
     def open_plot(self,chname):
         #create window and canvas to plot in
         if not self.openchannels[chname]:
@@ -337,7 +350,8 @@ class MonitorGUI:
         for j, dataname in enumerate(self.channels[chname].data_names):
             self.axes[chname][j].cla()
             self.lines[chname][dataname], = self.axes[chname][j].plot(self.times[chname],self.data[chname][dataname])
-        
+            self.axes[chname][j].set_title(dataname)
+
         self.canvases.update({chname : FigureCanvasTkAgg(self.figs[chname],temp)})
         
         temp.config(yscrollcommand=self.scrollbars[chname].set)
