@@ -35,7 +35,7 @@ class Channel(object) :
 
         :return: conn, object represention our connection to the server
         """
-        print self.records
+        print "Connecting channel {}\n records {}".format(self.name,self.records)
         conn = self.server.registerStream(
             stream=self.name,
             records=self.records,

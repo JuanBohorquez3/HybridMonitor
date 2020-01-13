@@ -126,7 +126,10 @@ from origin.client import server
 from origin import current_time, TIMESTAMP
 
 print 'initializing picos'
-# initialize the picos monitor
+
+picosDLLPath = "C:\Program Files\Pico Technology\SDK\lib"
+
+# initialize the picos monitor, with the MOT chamber thermocouple channels
 tempChannels = {"Chamber": 1,
                 "Door Coils": 2,
                 "CPU Coils": 3,
@@ -135,8 +138,15 @@ tempChannels = {"Chamber": 1,
                 "X2Y2": 6,
                 "BreadBoard": 7,
                 "LN2 FillPort": 8}
-picosDLLPath = "C:\Program Files\Pico Technology\SDK\lib"
+
 picos = PicosMonitor.TC08USB(tempChannels, dll_path=picosDLLPath, channel_names="Hybrid_Temp")
+
+# initialize the picos monitor, with the Cs cell thermocouple channels
+CellTempChannels = {"Left": 1,
+                    "Right": 2,
+                    "Center": 3}
+#picos = PicosMonitor.TC08USB(CellTempChannels, dll_path=picosDLLPath, channel_names="Hybrid_CsCellTemp")
+
 
 print 'Initializing NIDAQ'
 # initialize the pickoff monitor
@@ -178,23 +188,43 @@ lockChannel = {"1190 Lock": 'ai11',
 lockConversion = {"1190 Lock": lambda v: 0.25*v,
                   "1190 Warn": lambda v: 0.25*v}
 
+CsCellPowerChannels = {"Incident": 'ai13',
+                       "Transmitted": 'ai14'}
+
+CsCellPowerConversion = {"Incident": lambda v: v,
+                         "Transmitted": lambda v: v}
+
+HVBoardChannels = {"CH1 out": 'ai13',
+                   "CH2 out": 'ai14'}
+
+HVBoardConversion = {"CH1 out": lambda v: v,
+                     "CH2 out": lambda v: v}
+
 ADCChan = {"Hybrid_Beam_Balances": I2VChannels,
            "Hybrid_Mag": MagSensorChannels,
            "Hybrid_Mux": MuxChannels,
            "Hybrid_uW": uWRabiChannels,
-           "Hybrid_Locks": lockChannel}
+           "Hybrid_Locks": lockChannel,
+           "Hybrid_HV": HVBoardChannels}
+#           "Hybrid_CsCellPower": CsCellPowerChannels}
 
 ADCCon = {"Hybrid_Beam_Balances": I2VConversion,
           "Hybrid_Mag": MagConversion,
           "Hybrid_Mux": MuxConversion,
           "Hybrid_uW": uWRabiConversion,
-          "Hybrid_Locks": lockConversion}
+          "Hybrid_Locks": lockConversion,
+          "Hybrid_HV": HVBoardConversion}
+          #"Hybrid_CsCellPower": CsCellPowerConversion}
 
-ADCDatatypes = {"Hybrid_Beam_Balances": "float",
-                "Hybrid_Mag": "float",
-                "Hybrid_Mux": "float",
-                "Hybrid_uW": "float",
-                "Hybrid_Locks": "int"}
+DataTypes = {"Hybrid_Beam_Balances": "float",
+             "Hybrid_Mag": "float",
+             "Hybrid_Mux": "float",
+             "Hybrid_uW": "float",
+             "Hybrid_Locks": "int",
+             "Hybrid_Temp": "float",
+             "Hybrid_HV": "float"}
+             #"Hybrid_CsCellTemp": "float",
+             #"Hybrid_CsCellPower": "float"}
 
 #NIDAQ = DummyMonitor.DummyMonitor(ADCChan,ADCChan.keys())
 NIDAQ = NIDAQMonitor.NIDAQmxAI(ADCChan, conversion=ADCCon,channel_names=ADCChan.keys())
@@ -234,7 +264,7 @@ Monitors = [NIDAQ,
 
 #qq = Queue.Queue()
 stop_event = threading.Event()
-mongui = GUI.MonitorGUI(measurementPeriod,ADCDatatypes,serv,Monitors)
+mongui = GUI.MonitorGUI(measurementPeriod,DataTypes,serv,Monitors)
 monthread = MonitorThread(mongui.channels,config,mongui.queues,stop_event)
 monthread.start()
 mongui.run()

@@ -189,8 +189,8 @@ class MonitorGUI:
         #d = ChannelOpenDialog(self.root,self.channelnames)
         #self.defaultchannels = d.result
         
-        for chname in self.defaultchannels:
-            self.open_channel(chname,datatypes[chname],serv,self.chmonitor[chname])
+        #for chname in self.defaultchannels:
+        #    self.open_channel(chname,datatypes[chname],serv,self.chmonitor[chname])
         
         self.start()
     
@@ -412,7 +412,7 @@ class MonitorGUI:
         if self.openchannels[chname]:
             self.close_channel(chname)
         else:
-            self.open_channel(chname,self.datatypes[chname],self.serv,self.chmonitor[chname])
+            self.open_channel(chname, self.datatypes[chname], self.serv, self.chmonitor[chname])
         
     def toggle_plot(self,chname):
         if self.plotchannels[chname]:
