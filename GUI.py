@@ -38,7 +38,7 @@ class MonitorGUI:
     Uses thread-safe queues to get data passed from MonitorThread.
     Plots data vs. time for enabled channels.
     """
-    def __init__(self,waitsecs,datatypes,serv,mons):
+    def __init__(self, measurementT, waitsecs, datatypes, serv, mons):
         """
         Initialize GUI.
         Open channel selection dialog and connect to selected channels.
@@ -48,6 +48,9 @@ class MonitorGUI:
         :param serv: server
         :param mons: monitors associated with channels to open
         """
+
+        self.measurementT = measurementT
+
         self.root = Tk()
         self.root.title("Hybrid Data Monitor")
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -91,7 +94,7 @@ class MonitorGUI:
         self.tavgmin = IntVar()
         self.tavgmin.set(0)
         self.tavgsec = IntVar()
-        self.tavgsec.set(4)
+        self.tavgsec.set(waitsecs)
         self.tavgsec_display = StringVar()
         self.tavgsec_display.set("%02d" % self.tavgsec.get())
         self.tavgslider = Scale(tlimitframe,from_=waitsecs,to=1800,resolution=waitsecs,orient=HORIZONTAL)
@@ -233,78 +236,83 @@ class MonitorGUI:
         if self.started:
             for chname in self.channels:
                 self.plot_channel(chname)
-            self.root.after(1000*self.waitsecs,self.plot_all)
+            self.root.after(1000*self.waitsecs, self.plot_all)
     
     def plot_channel(self,chname):
         #will still collect data when plotchannels is False
         #will only average and plot data when plotchannels is True
-        
+
         while not self.queues[chname].empty():
-            
-            
+
+
             #data uploaded to dictionary in queue by MonitorThread, needs to be retrieved
-            qitem = self.queues[chname].get() 
+            qitem = self.queues[chname].get()
             t = qitem['measurement_time']
-            
+
             #convert time from datestamp to datetime object format, add to time list
             if len(self.times[chname]) > 0 and self.times[chname][0] < self.times[chname][-1]-timedelta(days=1):
-                self.times[chname] = self.shift1(self.times[chname],datetime.fromtimestamp(t/2**32))
+                self.times[chname] = self.shift1(self.times[chname], datetime.fromtimestamp(t/2**32))
                 for dataname in self.channels[chname].data_names:
                     self.data[chname][dataname] = self.shift1(self.data[chname][dataname],qitem[dataname])
             else:
-                self.times[chname] = np.append(self.times[chname],datetime.fromtimestamp(t/2**32))
+                self.times[chname] = np.append(self.times[chname], datetime.fromtimestamp(t/2**32))
                 for dataname in self.channels[chname].data_names:
                     self.data[chname][dataname] = np.append(self.data[chname][dataname],qitem[dataname])
-            
-            #number of points to average over based on time to avg/data time spacing
-            navg = self.tavgslider.get()/self.waitsecs
-            
-            if self.plotchannels[chname]:
 
-                timewindow = timedelta(seconds=self.tlimitslider.get()*60)
+            # number of points to average over based on (averaging time)/(measurement period)
+            navg = self.tavgslider.get()/self.measurementT
 
-                if self.datatypes[chname] == 'float':
-                    #create temporary time average array
-                    temp_t = timeavg(self.times[chname],navg)
+        if self.plotchannels[chname]:
 
-                    currentt = temp_t[-1]
-                    tlim_index = np.searchsorted(temp_t,currentt-timewindow)
-                    plot_t = temp_t[tlim_index:]
+            timewindow = timedelta(seconds=self.tlimitslider.get()*60)
 
-                    #plot data for each field in channelstream
-                    for j, dataname in enumerate(self.channels[chname].data_names):
-                        #data averaging done in temporary way in case navg changes
-                        tempdata = np.pad(self.data[chname][dataname],(0, (navg-self.data[chname][dataname].size%navg)%navg),mode='constant',constant_values=np.NaN)
-                        tempdata = tempdata.reshape(-1,navg)
-                        tempdata = np.nanmean(tempdata,axis=1)
+            if self.datatypes[chname] == 'float':
+                #create temporary time average array
+                temp_t = timeavg(self.times[chname],navg)
 
-                        plotdata = tempdata[tlim_index:]
+                currentt = temp_t[-1]
+                tlim_index = np.searchsorted(temp_t,currentt-timewindow)
+                plot_t = temp_t[tlim_index:]
 
-                        self.lines[chname][dataname].set_xdata(temp_t)
-                        self.lines[chname][dataname].set_ydata(tempdata)
+                #plot data for each field in channelstream
+                for j, dataname in enumerate(self.channels[chname].data_names):
+                    #data averaging done in temporary way in case navg changes
+                    tempdata = np.pad(self.data[chname][dataname],(0, (navg-self.data[chname][dataname].size%navg)%navg),mode='constant',constant_values=np.NaN)
+                    tempdata = tempdata.reshape(-1,navg)
+                    tempdata = np.nanmean(tempdata,axis=1)
 
-                        self.axes[chname][j].set_xlim([currentt-timewindow,currentt])
-                        self.axes[chname][j].set_ylim([np.amin(plotdata),np.amax(plotdata)])
+                    plotdata = tempdata[tlim_index:]
 
-                    #self.figs[chname].autofmt_xdate()
-                else:
-                    currentt = self.times[chname][-1]
+                    self.lines[chname][dataname].set_xdata(temp_t)
+                    self.lines[chname][dataname].set_ydata(tempdata)
 
-                    for j, dataname in enumerate(self.channels[chname].data_names):
-                        tempdata = self.data[chname][dataname].astype(int)
+                    self.axes[chname][j].set_xlim([currentt-timewindow,currentt])
+                    self.axes[chname][j].set_ylim([np.amin(plotdata),np.amax(plotdata)])
 
-                        self.lines[chname][dataname].set_xdata(self.times[chname])
-                        self.lines[chname][dataname].set_ydata(tempdata)
+                #self.figs[chname].autofmt_xdate()
+            else:
+                currentt = self.times[chname][-1]
 
-                        self.axes[chname][j].set_xlim([currentt-timewindow,currentt])
-                        self.axes[chname][j].set_ylim([np.amin(tempdata),np.amax(tempdata)])
+                for j, dataname in enumerate(self.channels[chname].data_names):
+                    tempdata = self.data[chname][dataname].astype(int)
 
-                self.figs[chname].canvas.draw()
-                self.figs[chname].canvas.flush_events()
+                    self.lines[chname][dataname].set_xdata(self.times[chname])
+                    self.lines[chname][dataname].set_ydata(tempdata)
+
+                    self.axes[chname][j].set_xlim([currentt-timewindow,currentt])
+                    self.axes[chname][j].set_ylim([np.amin(tempdata),np.amax(tempdata)])
+
+            self.figs[chname].canvas.draw()
+            self.figs[chname].canvas.flush_events()
                 #self.canvases[chname].draw()
 
     def shift1(self, arr, value=np.nan):
-        #efficient shifting algorithm to discard first element and add value at end
+        """
+        Shifts arr, discards first element adds value at end
+        :param arr : numpy 1-D array
+        :param value : item or arr's type
+        """
+        #
         result = np.empty_like(arr)
         result[-1] = value
         result[:-1] = arr[1:]

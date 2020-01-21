@@ -51,22 +51,32 @@ class MonitorThread(threading.Thread):
         for channel in self.channels.values():
             print channel.name
         self.err = 0
+        lp = 0
         while not self.stop_event.is_set():
             try:
                 # t1 = time.clock()
+                tc = current_time(self.config)
+                prnt = True
+                # if tc-lp > 1:
+                    # prnt = True
                 for channel in self.channels.values():
-                    print "sending " + channel.name
-                    print "Measured :" + repr(channel.measure())
+                    channel.measure()
+                    if prnt:
+                        print "sending " + channel.name
+                        print "Measured :" + repr(channel.data)
                     ts = current_time(self.config)
                     data = channel.data
+                    #print channel.data
                     data.update({TIMESTAMP: ts})
                     #print(data)
 ### Following try/except loop enables upload data to server
                     try:
+                        #print channel.data
                         channel.connection.send(**channel.data)
-                    except Exception:
-                        close_all(self.channels.values())
-                        raise Exception
+                    except KeyError as e:
+                       close_all(self.channels.values())
+                       print "Error sending data for stream : {} \n{}".format(channel.name, e)
+                       raise Exception
                     self.queues[channel.name].put(data)
             # interrupt this with a keystroke and hang connection
                 if self.err == 1:
@@ -104,7 +114,7 @@ def close_all(channel_list):
     return status
 
 # How often to measure data and log it
-measurementPeriod = 4  # s
+measurementPeriod = 4 # s
 
 t0 = time.clock()
 # we must first find ourselves
@@ -264,8 +274,9 @@ Monitors = [NIDAQ,
 
 #qq = Queue.Queue()
 stop_event = threading.Event()
-mongui = GUI.MonitorGUI(measurementPeriod,DataTypes,serv,Monitors)
-monthread = MonitorThread(mongui.channels,config,mongui.queues,stop_event)
+waitsecs = max(measurementPeriod, 1)
+mongui = GUI.MonitorGUI(measurementPeriod, waitsecs, DataTypes, serv,  Monitors)
+monthread = MonitorThread(mongui.channels, config, mongui.queues, stop_event)
 monthread.start()
 mongui.run()
 print "Exiting GUI."
