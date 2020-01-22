@@ -22,8 +22,8 @@ import Queue
 import zmq
 import json
 
-def timeavg(datetimelist,navg):
-    #average times, datetime makes this hard
+def timeavg(datetimelist, navg):
+    # average times, datetime makes this hard
     dlist = map(datetime.timetuple, datetimelist)
     timestamplist = np.array(map(time.mktime,dlist))
     timestamplist = np.pad(timestamplist,(0, (navg-len(timestamplist)%navg)%navg),mode='constant',constant_values=np.NaN)
@@ -239,13 +239,12 @@ class MonitorGUI:
             self.root.after(1000*self.waitsecs, self.plot_all)
     
     def plot_channel(self,chname):
-        #will still collect data when plotchannels is False
-        #will only average and plot data when plotchannels is True
+        # will still collect data when plotchannels is False
+        # will only average and plot data when plotchannels is True
 
         while not self.queues[chname].empty():
 
-
-            #data uploaded to dictionary in queue by MonitorThread, needs to be retrieved
+            # data uploaded to dictionary in queue by MonitorThread, needs to be retrieved
             qitem = self.queues[chname].get()
             t = qitem['measurement_time']
 
@@ -260,7 +259,7 @@ class MonitorGUI:
                     self.data[chname][dataname] = np.append(self.data[chname][dataname],qitem[dataname])
 
             # number of points to average over based on (averaging time)/(measurement period)
-            navg = self.tavgslider.get()/self.measurementT
+            navg = int(self.tavgslider.get()/self.measurementT)
 
         if self.plotchannels[chname]:
 
@@ -268,7 +267,7 @@ class MonitorGUI:
 
             if self.datatypes[chname] == 'float':
                 #create temporary time average array
-                temp_t = timeavg(self.times[chname],navg)
+                temp_t = timeavg(self.times[chname], navg)
 
                 currentt = temp_t[-1]
                 tlim_index = np.searchsorted(temp_t,currentt-timewindow)

@@ -114,7 +114,7 @@ def close_all(channel_list):
     return status
 
 # How often to measure data and log it
-measurementPeriod = 4 # s
+measurementPeriod = .5  # s
 
 t0 = time.clock()
 # we must first find ourselves
