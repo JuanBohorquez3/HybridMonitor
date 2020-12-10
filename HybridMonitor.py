@@ -114,7 +114,7 @@ def close_all(channel_list):
     return status
 
 # How often to measure data and log it
-measurementPeriod = .5  # s
+measurementPeriod = 0.05  # s
 
 t0 = time.clock()
 # we must first find ourselves
@@ -124,8 +124,8 @@ print fullBinPath
 fullBasePath = os.path.dirname(fullBinPath)
 print fullBasePath
 ## Works on Hybrid Machine
-fullLibPath = os.path.join(fullBasePath, "origin\\origin\\lib")
-fullCfgPath = os.path.join(fullBasePath, "origin\\origin\\config")
+fullLibPath = os.path.join(fullBasePath, "Origin\\lib")
+fullCfgPath = os.path.join(fullBasePath, "Origin\\config")
 ## Works on Danny's Machine
 #fullLibPath = os.path.join(fullBasePath, "C:\\Users\\Wendt\\Documents\\Hybrid\\Origin\\lib")
 #fullCfgPath = os.path.join(fullBasePath, "C:\\Users\\Wendt\\Documents\\Hybrid\\Origin\\config")
@@ -176,7 +176,7 @@ I2VConversion = {"X1": lambda v: 0.740*v+0.026,
 
 MuxChannels = {"FORT": "ai6"}
 
-MuxConversion = {"FORT": lambda v: v}
+MuxConversion = {"FORT": lambda v: 20.54*v-0.54}
 
 MagSensorChannels = {"X": 'ai8',
                      "Y": 'ai9',
@@ -210,34 +210,37 @@ HVBoardChannels = {"CH1 out": 'ai13',
 HVBoardConversion = {"CH1 out": lambda v: v,
                      "CH2 out": lambda v: v}
 
+
+PowerMeterChannels = {'TA': 'ai13'}
+
+PowerMeterConversion = {'TA': lambda v: float(780.0*v)/2.0}  #V to mW
+
 ADCChan = {"Hybrid_Beam_Balances": I2VChannels,
            "Hybrid_Mag": MagSensorChannels,
            "Hybrid_Mux": MuxChannels,
-           "Hybrid_uW": uWRabiChannels,
-           "Hybrid_Locks": lockChannel,
-           "Hybrid_HV": HVBoardChannels}
-#           "Hybrid_CsCellPower": CsCellPowerChannels}
+           "Hybrid_Power_Meter": PowerMeterChannels}
+           #"Hybrid_uW": uWRabiChannels,
+           #"Hybrid_Locks": lockChannel,
+           #"Hybrid_HV": HVBoardChannels}
+#          Hybrid_CsCellPower": CsCellPowerChannels}
 
 ADCCon = {"Hybrid_Beam_Balances": I2VConversion,
           "Hybrid_Mag": MagConversion,
           "Hybrid_Mux": MuxConversion,
-          "Hybrid_uW": uWRabiConversion,
-          "Hybrid_Locks": lockConversion,
-          "Hybrid_HV": HVBoardConversion}
+          "Hybrid_Power_Meter": PowerMeterConversion}
+          #"Hybrid_uW": uWRabiConversion,
+          #"Hybrid_Locks": lockConversion,
+          #"Hybrid_HV": HVBoardConversion}
           #"Hybrid_CsCellPower": CsCellPowerConversion}
 
-DataTypes = {"Hybrid_Beam_Balances": "float",
+DataTypes = {"Hybrid_Temp": "float",
+             "Hybrid_Beam_Balances": "float",
              "Hybrid_Mag": "float",
              "Hybrid_Mux": "float",
-             "Hybrid_uW": "float",
-             "Hybrid_Locks": "int",
-             "Hybrid_Temp": "float",
-             "Hybrid_HV": "float"}
-             #"Hybrid_CsCellTemp": "float",
-             #"Hybrid_CsCellPower": "float"}
+             "Hybrid_Power_Meter": "float"}
 
 #NIDAQ = DummyMonitor.DummyMonitor(ADCChan,ADCChan.keys())
-NIDAQ = NIDAQMonitor.NIDAQmxAI(ADCChan, conversion=ADCCon,channel_names=ADCChan.keys())
+NIDAQ = NIDAQMonitor.NIDAQmxPy(ADCChan, conversion=ADCCon,channel_names=ADCChan.keys())
 
 print 'grabbing config file'
 if len(sys.argv) > 1:

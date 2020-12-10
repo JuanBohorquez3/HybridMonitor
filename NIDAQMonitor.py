@@ -15,47 +15,39 @@ __author__ = 'Juan Bohorquez'
 import ctypes
 import numpy
 import time
-from Monitor import Monitor as Mon
-import logging
-logger = logging.getLogger(__name__)
+from Monitor import Monitor
+import nidaqmx as daq
+import nidaqmx.constants as daq_constants
+from nidaqmx import stream_readers, error_codes, DaqError
 
-
-class NIDAQmxAI(Mon):
+class NIDAQmxPy(Monitor):
 
     # TODO : Set this up to work with a config file
-    version = '2018.11.02'
+    version = '2020.03.02'
 
-    allow_evaluation = True
-    enable = False
-    DAQmx_Val_RSE = 10083
-    DAQmx_Val_NRSE = 10078
-    DAQmx_Val_Diff = 10106
-    DAQmx_Val_PseudoDiff = 12529
-    DAQmx_Val_Volts = 10348
-    DAQmx_Val_Rising = 10280
-    DAQmx_Val_Falling = 10171
-    DAQmx_Val_FiniteSamps = 10178
-    DAQmx_Val_GroupByChannel = 0
-    DAQmx_Val_GroupByScanNumber = 1
-    DAQmx_Val_ChanPerLine = 0
+    Acquisition_Type = daq_constants.AcquisitionType.FINITE
+    Terminal_Config = daq_constants.TerminalConfiguration.RSE
+    DeviceName = 'PXI1Slot6'
+    samples_per_measurement = 1
+    sample_rate = 500
+    triggerSource = 'PFI0'
+    triggerEdge = 'Rising'
     convert = False
+    timeout = 1.0
 
     def __init__(self, channels, channel_names, conversion=None):
 
-        Mon.__init__(self, channels,channel_names)
-        self.DeviceName = "PXI2Slot6"
-        self.samples_per_measurement = 10
-        self.sample_rate = 1000
-        self.triggerSource = '/PXI2Slot6/PFI0'
-        self.triggerEdge = 'Rising'
-        self.nidaq = ctypes.windll.nicaiu
-        self.DAQmx_Val_Cfg_Default = ctypes.c_long(-1)
-        self.taskHandle = ctypes.c_ulong(0)
+        Monitor.__init__(self, channels, channel_names)
+
+        # Not sure what these two lines do ...
+        self.task = None
+        self.task_in_stream = None
+        self.reader = None
 
         # Are we making a conversion from voltage to some other unit here?
         self.convert = isinstance(conversion, type({}))
-        print "NIDAQ self.convert  = {}".format(self.convert)
-        print "NIDAQ conversions = {}".format(conversion)
+        # print "NIDAQ self.convert  = {}".format(self.convert)
+        # print "NIDAQ conversions = {}".format(conversion)
         # If so let's make sure the conversion dictionary is going to work
         err_type = "Error: Conversion should have lambda function at lowest level"
         if self.convert:
@@ -71,20 +63,21 @@ class NIDAQmxAI(Mon):
                     assert set(ch3) == set(ch4), err_shp
                 for key, value in conversion.iteritems():
                     for func in value.values():
-                        assert isinstance(func, type(lambda x: x+1)), err_type
+                        assert isinstance(func, type(lambda x: x + 1)), err_type
             else:
                 for key, value in conversion.iteritems():
-                    assert isinstance(value, type(lambda x: x+1)), err_type
+                    assert isinstance(value, type(lambda x: x + 1)), err_type
 
         self.conversion = conversion
 
         # List the analog in channels we will be monitoring on the DAQ
-        if self.many_channels:
+        if self.many_channels:  # For Issue
             self.channels_to_open = []
             print self.channels.values()
             for channel in self.channels.values():
                 # make a list of all unique channels being opened
-                self.channels_to_open = list(set(self.channels_to_open) | set(channel.values()))
+                self.channels_to_open = list(
+                    set(self.channels_to_open) | set(channel.values()))
         else:
             self.channels_to_open = channels.values()
 
@@ -93,124 +86,93 @@ class NIDAQmxAI(Mon):
         self.mychans = self.channel_string()
 
         # initialize data location
-        self.data = numpy.zeros((self.samples_per_measurement * len(self.channels_to_open),), dtype=numpy.float64)
+        self.data = numpy.zeros(len(self.channels_to_open))
 
         self.prepare_task()
-        
+
     def channel_string(self):
         mychans = ""
         for i, chan in enumerate(self.channels_to_open):
             if i < len(self.channels_to_open) - 1:
-                mychans += self.DeviceName+"/"+chan+", "
+                mychans += self.DeviceName + "/" + chan + ", "
             else:
-                mychans += self.DeviceName+"/"+chan
-        
+                mychans += self.DeviceName + "/" + chan
+
         print "mychans : " + mychans
         return mychans
 
-    def CHK(self, err, func):
-        if err < 0:
-            buf_size = 1000
-            buf = ctypes.create_string_buffer('\000'*buf_size)
-            buf_v_size = 2000
-            buf_v = ctypes.create_string_buffer('\000'*buf_v_size)
-            self.nidaq.DAQmxGetErrorString(err, ctypes.byref(buf), buf_size)
-            self.nidaq.DAQmxGetExtendedErrorInfo(ctypes.byref(buf_v), buf_v_size)
-            print 'nidaq call %s failed with error %d: %s' % (func, err, repr(buf.value))
-            print 'nidaq call %s failed with verbose error %d: %s' % (func, err, repr(buf_v.value))
-            raise ValueError
-
     def prepare_task(self, trig=True):
-        
+
         try:
-            if self.taskHandle.value != 0:
+            if self.task is not None:
                 self.close()
-                self.taskHandle = ctypes.c_ulong(0)
-                time.sleep(2)
+                # time.sleep(2) # Necessary??
 
             # Open the measurement task
-            self.CHK(self.nidaq.DAQmxCreateTask("", ctypes.byref(self.taskHandle)), "CreateTask")
-            
-            print "Task Handle: {}".format(self.taskHandle.value)
+            self.task = daq.Task("Monitor")
 
-            # open the input voltage channels
-            self.CHK(self.nidaq.DAQmxCreateAIVoltageChan(self.taskHandle,
-                                                         ctypes.c_char_p(self.mychans),
-                                                         "",
-                                                         self.DAQmx_Val_RSE,
-                                                         ctypes.c_double(-5.0),
-                                                         ctypes.c_double(5.0),
-                                                         self.DAQmx_Val_Volts,
-                                                         None), "CreateAIVoltageChan")
-            
-            # configure the timing
-            self.CHK(self.nidaq.DAQmxCfgSampClkTiming(self.taskHandle,
-                                                      "",
-                                                      ctypes.c_double(self.sample_rate),
-                                                      self.DAQmx_Val_Rising,
-                                                      self.DAQmx_Val_FiniteSamps,
-                                                      ctypes.c_uint64(self.samples_per_measurement)),
-                     "CfgSampClkTiming")
-            
+            # print "Task Handle: {}".format(self.task.name)
+
+            add_ai_chan = self.task.ai_channels.add_ai_voltage_chan
+            add_ai_chan(self.mychans,
+                        terminal_config=self.Terminal_Config)
+
+            set_timing = self.task.timing.cfg_samp_clk_timing
+            set_timing(self.sample_rate,
+                       sample_mode=self.Acquisition_Type)
+
             if trig:
-                self.CHK(self.nidaq.DAQmxCfgDigEdgeStartTrig(self.taskHandle,
-                                                             ctypes.c_char_p(self.triggerSource),
-                                                             ctypes.c_int32(self.DAQmx_Val_Rising)),
-                         "CfgDigEdgeStartTrig_Rising")
-                
-            self.CHK(self.nidaq.DAQmxStartTask(self.taskHandle), "StartTask")
-            
+                set_trig = self.task.triggers.start_trigger.cfg_dig_edge_start_trig
+                set_trig("PFI0")
+
+            self.task.start()
+
+            self.task_in_stream = daq._task_modules.in_stream.InStream(self.task)
+            self.reader = stream_readers.AnalogMultiChannelReader(self.task_in_stream)
+
             return
         except KeyboardInterrupt:
             self.close()
+            # TODO : Proper traceback here
             raise KeyboardInterrupt
-    
+
+    def readout_auto(self):
+
+        self.task.stop()
+        self.task.triggers.start_trigger.disable_start_trig()
+        dat = self.task.read()
+        self.task.stop()
+        self.task.triggers.start_trigger.cfg_dig_edge_start_trig("PFI0")
+        return dat
+
     def measure(self, channel_name=None):
         try:
-            read = ctypes.c_int32()
-            print "reading out in triggered mode"
-            self.nidaq.DAQmxReadAnalogF64(self.taskHandle,
-                                          self.samples_per_measurement,
-                                          ctypes.c_double(10.0),
-                                          self.DAQmx_Val_GroupByScanNumber,
-                                          self.data.ctypes.data,
-                                          len(self.data),
-                                          ctypes.byref(read), None)
-            if self.nidaq.DAQmxWaitUntilTaskDone(self.taskHandle, ctypes.c_double(4.0)) < 0:
-                print "reading out in auto mode"
-                self.nidaq.DAQmxStopTask(self.taskHandle)
-                self.nidaq.DAQmxDisableStartTrig(self.taskHandle)
-                self.nidaq.DAQmxStartTask(self.taskHandle)
-                self.CHK(self.nidaq.DAQmxReadAnalogF64(self.taskHandle,
-                                                       self.samples_per_measurement,
-                                                       ctypes.c_double(10.0),
-                                                       self.DAQmx_Val_GroupByScanNumber,
-                                                       self.data.ctypes.data,
-                                                       len(self.data),
-                                                       ctypes.byref(read), None), "ReadAnalogF64")
-                if self.nidaq.DAQmxWaitUntilTaskDone(self.taskHandle, ctypes.c_double(4.0)) < 0:
-                    print "Something went wrong."
-                    raise ValueError
-      
-            self.nidaq.DAQmxStopTask(self.taskHandle)
-            self.CHK(self.nidaq.DAQmxCfgDigEdgeStartTrig(self.taskHandle,
-                                                         ctypes.c_char_p(self.triggerSource),
-                                                         ctypes.c_int32(self.DAQmx_Val_Rising)),
-                     "CfgDigEdgeStartTrig_Rising")
-            self.CHK(self.nidaq.DAQmxStartTask(self.taskHandle), "Restarting triggered task")
+            # This reads out in triggered mode, as set above.
+            try:
+                # print self.data
+                self.reader.read_one_sample(self.data,
+                                            timeout=self.timeout)
+            except DaqError as daq_err:
+                daq_err_code = daq_err.error_code
+                if daq_err_code == -200284:
+                    print "Timeout waiting for trigger, reading out in auto mode"
+                    time.sleep(1)
+                    self.data = numpy.array(self.readout_auto())
+                else:
+                    raise daq_err
 
             # put all of the data in a dictionary mapping analog input channels to the corresponding voltages
             powers_usort = {}
             for i, chan in enumerate(self.channels_to_open):
                 powers_usort.update({chan: self.data[i]})
-            #print powers_usort
+            # print powers_usort
 
             if channel_name is not None:
                 assert channel_name in self.channels.keys(), "channel_name is not a Monitor Channel"
 
             # place the (possibly) converted data, into a dictionary to be returned.
-            powers = {}
-            #print self.channels
+            powers = {}  # For the love of GNU choose better variable names!
+            # print self.channels
             # if there are many_channels, check if a channel_name has been specified, if so return data from that
             # channel. Otherwise return all of the data in a large dictionary.
             if self.many_channels:
@@ -220,17 +182,18 @@ class NIDAQmxAI(Mon):
                         for key, value in self.channels[chan]:
                             if self.convert:
                                 func = self.conversion[chan][key]
-                                powers[chan].update({key: func(powers_usort[value])})
+                                powers[chan].update(
+                                    {key: func(powers_usort[value])})
                             else:
                                 powers[chan].update({key: powers_usort[value]})
                 else:
-                    #print self.channels[channel_name].keys()
+                    # print self.channels[channel_name].keys()
                     for key in self.channels[channel_name].keys():
                         value = self.channels[channel_name][key]
                         if self.convert:
-                            #print self.channels[channel_name]
-                            #print channel_name
-                            #print key, value
+                            # print self.channels[channel_name]
+                            # print channel_name
+                            # print key, value
                             func = self.conversion[channel_name][key]
                             powers.update({key: func(powers_usort[value])})
                         else:
@@ -243,12 +206,15 @@ class NIDAQmxAI(Mon):
                         powers.update({key: func(powers_usort[value])})
                     else:
                         powers.update({key: powers_usort[value]})
+            self.prepare_task()
             return powers
         except KeyboardInterrupt:
             self.close()
             raise KeyboardInterrupt
-            
+
     def close(self):
-        print 'Closing DAQmx task'
-        self.CHK(self.nidaq.DAQmxStopTask(self.taskHandle), "Stopping Task")
-        self.CHK(self.nidaq.DAQmxClearTask(self.taskHandle), "Clearing Task")
+        if self.task is None:
+            return
+        #print 'Closing DAQmx task'
+        self.task.close()
+        self.task = None

@@ -54,7 +54,7 @@ class Monitor(object):
         If self.many_channels is not true it ignores channel_name and queries active channels
         :param channel_name: String. Name of Hybrid channel to access. If self.many_channels is
             false, this is ignored
-        :return: data: dictionary : if channel_name is set, or self.many_channels is false {stream_name: data}
+        :return: data: dictionary : ifchannel_name is set, or self.many_channels is false {stream_name: data}
                     otherwise {channel_names: {stream_names: data}}
         """
 
